@@ -106,8 +106,10 @@ class ChordNode:
             response["status"] = "OK"
 
         elif cmd == "GET":
+            print("GET REQUEST")
             key = request["key"]
             result = self.chord_get(key)
+            print(result)
             response["value"] = result
 
         elif cmd == "JOIN":
@@ -293,12 +295,14 @@ class ChordNode:
         Insert (key -> value) into the correct node’s data store.
         """
         key_id = chord_hash(key)
-        node_id, node_host, node_port = self.find_successor(key_id)
+        (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if node_id == self.node_id:
             # We are responsible
-            self.data_store[key_id] = value
+            print(f"[Node {self.node_id}] PUT {key} -> {value}")
+            self.data_store[key] = value
         else:
             # Forward to the correct node
+            print(f"[Node {self.node_id}] PUT {key} -> {value} forwards to {node_id} via {node_host}:{node_port}")
             self._send(node_host, node_port, {
                 "cmd": "PUT",
                 "key": key,
@@ -310,11 +314,13 @@ class ChordNode:
         Retrieve the value for 'key' from the correct node in the ring.
         """
         key_id = chord_hash(key)
-        node_id, node_host, node_port = self.find_successor(key_id)
+        (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if node_id == self.node_id:
-            return self.data_store.get(key_id, None)
+            print(self.data_store)
+            return self.data_store.get(key, None)
         else:
             # Forward the request
+            print(f"[Node {self.node_id}] GET {key} from {node_id} forwards to {node_host}:{node_port}")
             resp = self._send(node_host, node_port, {
                 "cmd": "GET",
                 "key": key
