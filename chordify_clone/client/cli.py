@@ -32,6 +32,9 @@ def main():
 
     args = parser.parse_args()
     
+    if args.value is None:
+        args.value = f"{args.host}:{args.port}"
+    
     cmd = args.command.upper()
     if cmd == "PUT":
         if not args.key_or_value or not args.value:
@@ -69,7 +72,8 @@ def main():
             return
         request = {
             "cmd": "DELETE",
-            "key": args.key_or_value
+            "key": args.key_or_value,
+            "value": args.value
         }
         response = send_request(args.host, args.port, request)
         print("DELETE response:", response)

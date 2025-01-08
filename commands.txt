@@ -1,0 +1,14 @@
+Servers:
+python server/chord_node.py
+python server/chord_node.py --port 5001 --bootstrap_host 127.0.0.1 --bootstrap_port 5000
+
+Client:
+python client/cli.py --host 127.0.0.1 --port 5000 PUT "Like a Rolling Stone"
+python client/cli.py --host 127.0.0.1 --port 5000 GET "Like a Rolling Stone"
+python client/cli.py --host 127.0.0.1 --port 5001 GET "Like a Rolling Stone"
+
+python client/cli.py --host 127.0.0.1 --port 5000 DELETE "Like a Rolling Stone"
+
+python client/cli.py --host 127.0.0.1 --port 5001 PUT "The Message" "Title: The Message"
+
+python client/cli.py --host 127.0.0.1 --port 5000 INFO

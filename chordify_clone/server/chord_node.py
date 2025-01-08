@@ -25,7 +25,9 @@ class ChordNode:
         # Finger table: [ (start, (node_id, host, port)), ... ]
         self.finger_table = [(None, None)] * M
         
-        # Local data store: {key_id -> value}
+        # Local data store: {key_id -> {
+        #  key -> [values]
+        # }
         self.data_store = {}
 
         # Start the server socket
@@ -109,13 +111,11 @@ class ChordNode:
             key = request["key"]
             result = self.chord_get(key)
             response["value"] = result
+            
         elif cmd == "DELETE":
-            key = request["key"]
-            if key in self.data_store:
-                del self.data_store[key]
-                response["status"] = "OK"
-            else:
-                response["status"] = "NOT_FOUND"
+            key = request.get("key", None)
+            value = request.get("value", None)
+            response["status"] = "WRONG_PARAMS" if not key or not value else self.chord_delete(key, value)
 
         elif cmd == "JOIN":
             # Another node is asking to join through us
@@ -135,9 +135,11 @@ class ChordNode:
             self._update_successor((request["new_succ_id"], request["new_succ_host"], request["new_succ_port"]))
         elif cmd == "UPDATE_PREDECESSOR":
             self._update_predecessor((request["new_pred_id"], request["new_pred_host"], request["new_pred_port"]))
-
-        # Send response
-        client_sock.sendall(json.dumps(response).encode('utf-8'))
+        try:
+            # Send response
+            client_sock.sendall(json.dumps(response).encode('utf-8'))
+        except:
+            print("JSON error", response)
         client_sock.close()
 
     def join(self, bootstrap_host: str, bootstrap_port: int):
@@ -168,17 +170,19 @@ class ChordNode:
         2. Notify predecessor and successor to link each other.
         3. Close server socket.
         """
+        print(f"[Node {self.node_id}] Departing the ring...")
         succ_id, succ_host, succ_port = self.successor
         pred_id, pred_host, pred_port = self.predecessor if self.predecessor else (None, None, None)
 
         # 1. Transfer our data to the successor.
         #    For a minimal approach, just send all key-value pairs to the successor.
         for key_id, value in self.data_store.items():
-            self._send(succ_host, succ_port, {
-                "cmd": "PUT",
-                "key": f"__id__{key_id}",  # or some other marker to avoid re-hashing
-                "value": value
-            })
+            for key, itm_value in value.items():
+                self._send(succ_host, succ_port, {
+                    "cmd": "PUT",
+                    "key": key,
+                    "value": itm_value
+                })
         self.data_store.clear()
 
         # 2. Notify predecessor and successor to link each other directly.
@@ -257,7 +261,7 @@ class ChordNode:
         """
         import time
         while True:
-            self.stabilize()
+            # self.stabilize()
             self.fix_fingers()
             time.sleep(1)
 
@@ -304,7 +308,11 @@ class ChordNode:
         if node_id == self.node_id:
             # We are responsible
             print(f"[Node {self.node_id}] PUT {key} -> {value}")
-            self.data_store[key] = value
+            if key_id not in self.data_store:
+                self.data_store[key_id] = {}
+            if key not in self.data_store[key_id]:
+                self.data_store[key_id][key] = set()
+            self.data_store[key_id][key].add(value)
         else:
             # Forward to the correct node
             print(f"[Node {self.node_id}] PUT {key} -> {value} forwards to {node_id} via {node_host}:{node_port}")
@@ -321,8 +329,7 @@ class ChordNode:
         key_id = chord_hash(key)
         (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if node_id == self.node_id:
-            print(self.data_store)
-            return self.data_store.get(key, None)
+            return list(self.data_store[key_id][key]) if key_id in self.data_store and key in self.data_store[key_id] else []
         else:
             # Forward the request
             print(f"[Node {self.node_id}] GET {key} from {node_id} forwards to {node_host}:{node_port}")
@@ -330,25 +337,29 @@ class ChordNode:
                 "cmd": "GET",
                 "key": key
             })
-            return resp.get("value", None)
+            return resp.get("value", [])
 
-    def chord_delete(self, key: str):
+    def chord_delete(self, key: str, value: str):
         """
         Delete the key-value pair from the correct node in the ring.
         """
         key_id = chord_hash(key)
         (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if node_id == self.node_id:
-            if key in self.data_store:
-                del self.data_store[key]
+            if key_id in self.data_store and key in self.data_store[key_id] and value in self.data_store[key_id][key]:
+                self.data_store[key_id][key].remove(value)
+                if not self.data_store[key_id][key]:
+                    self.data_store[key_id].pop(key)
+                if not self.data_store[key_id]:
+                    self.data_store.pop(key_id)
                 return "OK"
-            else:
-                return "NOT_FOUND"
+            return "NOT_FOUND"
         else:
             # Forward the request
             resp = self._send(node_host, node_port, {
                 "cmd": "DELETE",
-                "key": key
+                "key": key,
+                "value": value
             })
             return resp.get("status", "ERROR")
     
