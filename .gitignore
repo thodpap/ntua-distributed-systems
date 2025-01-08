@@ -1,7 +1,7 @@
 *.zip
 */__pycache__/
-server/__pycache__/
-client/__pycache__/
+chordify_clone/server/__pycache__/
+chordify_clone/client/__pycache__/
 insert/
 queries/
 requests/

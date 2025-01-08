@@ -3,6 +3,8 @@ import threading
 import json
 from typing import Optional
 from utils import chord_hash, M, in_interval
+import sys
+import signal
 
 # Protocol constants
 BUFF_SIZE = 1024
@@ -119,6 +121,13 @@ class ChordNode:
             print(succ, pred)
             response["successor"] = succ
             response["predecessor"] = pred
+        elif cmd == "DEPART":
+            self.depart()
+            response["status"] = "departing"
+        elif cmd == "UPDATE_SUCCESSOR":
+            self._update_successor((request["new_succ_id"], request["new_succ_host"], request["new_succ_port"]))
+        elif cmd == "UPDATE_PREDECESSOR":
+            self._update_predecessor((request["new_pred_id"], request["new_pred_host"], request["new_pred_port"]))
 
         # Send response
         client_sock.sendall(json.dumps(response).encode('utf-8'))
@@ -145,6 +154,48 @@ class ChordNode:
         print(f"[Node {self.node_id}] Joined ring via {bootstrap_host}:{bootstrap_port} & got successor {successor_info}")
         print(f"[Node {self.node_id}] Successor: {self.successor}, Predecessor: {self.predecessor}")
     
+    def depart(self):
+        """
+        Gracefully remove this node from the Chord ring.
+        1. Transfer data to successor.
+        2. Notify predecessor and successor to link each other.
+        3. Close server socket.
+        """
+        succ_id, succ_host, succ_port = self.successor
+        pred_id, pred_host, pred_port = self.predecessor if self.predecessor else (None, None, None)
+
+        # 1. Transfer our data to the successor.
+        #    For a minimal approach, just send all key-value pairs to the successor.
+        for key_id, value in self.data_store.items():
+            self._send(succ_host, succ_port, {
+                "cmd": "PUT",
+                "key": f"__id__{key_id}",  # or some other marker to avoid re-hashing
+                "value": value
+            })
+        self.data_store.clear()
+
+        # 2. Notify predecessor and successor to link each other directly.
+        #    i.e., predecessor.successor = successor, successor.predecessor = predecessor
+        if pred_id is not None and (pred_id != self.node_id):
+            self._send(pred_host, pred_port, {
+                "cmd": "UPDATE_SUCCESSOR",
+                "new_succ_id": succ_id,
+                "new_succ_host": succ_host,
+                "new_succ_port": succ_port
+            })
+
+        if succ_id != self.node_id:
+            self._send(succ_host, succ_port, {
+                "cmd": "UPDATE_PREDECESSOR",
+                "new_pred_id": pred_id,
+                "new_pred_host": pred_host,
+                "new_pred_port": pred_port
+            })
+
+        print(f"[Node {self.node_id}] Departing the ring. Closing socket.")
+        self.server_sock.close()  # This will also break accept_connections loop.
+
+
     def find_successor(self, key_id: int):
         """
         Return the successor for key_id, possibly by forwarding to other nodes.
@@ -163,7 +214,10 @@ class ChordNode:
                 "cmd": "FIND_SUCCESSOR",
                 "key_id": key_id
             })
-            return tuple(resp["successor"]), tuple(resp["predecessor"])
+            if "successor" not in resp or "predecessor" not in resp:
+                return self.successor, self.predecessor
+            else:
+                return tuple(resp["successor"]), tuple(resp["predecessor"])
 
     def closest_preceding_node(self, key_id: int):
         """
@@ -284,8 +338,12 @@ class ChordNode:
         except:
             return {}
 
-import signal
-import sys
+    def _update_successor(self, new_successor):
+        self.successor = tuple(new_successor)
+
+    def _update_predecessor(self, new_predecessor):
+        self.predecessor = tuple(new_predecessor)
+
 
 def run_node(host, port, bootstrap_host=None, bootstrap_port=None):
     """
@@ -295,7 +353,7 @@ def run_node(host, port, bootstrap_host=None, bootstrap_port=None):
 
     def signal_handler(sig, frame):
         print('Shutting down node...')
-        node.server_sock.close()
+        node.depart()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
