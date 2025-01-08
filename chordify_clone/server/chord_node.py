@@ -106,11 +106,16 @@ class ChordNode:
             response["status"] = "OK"
 
         elif cmd == "GET":
-            print("GET REQUEST")
             key = request["key"]
             result = self.chord_get(key)
-            print(result)
             response["value"] = result
+        elif cmd == "DELETE":
+            key = request["key"]
+            if key in self.data_store:
+                del self.data_store[key]
+                response["status"] = "OK"
+            else:
+                response["status"] = "NOT_FOUND"
 
         elif cmd == "JOIN":
             # Another node is asking to join through us
@@ -327,6 +332,26 @@ class ChordNode:
             })
             return resp.get("value", None)
 
+    def chord_delete(self, key: str):
+        """
+        Delete the key-value pair from the correct node in the ring.
+        """
+        key_id = chord_hash(key)
+        (node_id, node_host, node_port), _ = self.find_successor(key_id)
+        if node_id == self.node_id:
+            if key in self.data_store:
+                del self.data_store[key]
+                return "OK"
+            else:
+                return "NOT_FOUND"
+        else:
+            # Forward the request
+            resp = self._send(node_host, node_port, {
+                "cmd": "DELETE",
+                "key": key
+            })
+            return resp.get("status", "ERROR")
+    
     def _send(self, host, port, message_dict):
         """
         Utility to send a JSON message to another node and receive a response.

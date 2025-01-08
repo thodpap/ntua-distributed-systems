@@ -24,7 +24,7 @@ def send_request(host, port, request_dict):
 
 def main():
     parser = argparse.ArgumentParser(description="CLI to interact with a Chord DHT node.")
-    parser.add_argument("command", type=str, help="Command to run: PUT, GET, INFO")
+    parser.add_argument("command", type=str, help="Command to run: PUT, GET, INFO, DELETE")
     parser.add_argument("key_or_value", type=str, nargs="?", help="Key (for GET/PUT), or unused for INFO")
     parser.add_argument("value", type=str, nargs="?", help="Value (for PUT)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Node host")
@@ -63,8 +63,17 @@ def main():
         }
         response = send_request(args.host, args.port, request)
         print("INFO response:", response)
+    elif cmd == "DELETE":
+        if not args.key_or_value:
+            print("Usage: cli.py DELETE <key> [--host] [--port]")
+            return
+        request = {
+            "cmd": "DELETE",
+            "key": args.key_or_value
+        }
+        response = send_request(args.host, args.port, request)
+        print("DELETE response:", response)
     else:
         print(f"Unknown command: {cmd}")
-
 if __name__ == "__main__":
     main()
