@@ -34,3 +34,12 @@ def in_interval(key_id: int, start_id: int, end_id: int, inclusive=False):
             return not (end_id < key_id <= start_id)
         else:
             return not (end_id < key_id < start_id)
+
+def _serialize_for_json(obj):
+    if isinstance(obj, set):
+        return list(obj)
+    elif isinstance(obj, dict):
+        return {k: _serialize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_serialize_for_json(item) for item in obj]
+    return obj

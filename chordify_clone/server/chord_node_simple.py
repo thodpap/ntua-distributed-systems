@@ -2,7 +2,7 @@ import socket
 import threading
 import json
 from typing import Optional
-from utils import chord_hash, M, in_interval
+from utils import chord_hash, M, in_interval, _serialize_for_json
 import sys
 import signal
 import time
@@ -162,7 +162,9 @@ class ChordNode:
             elif cmd == "TRANSFER_KEYS":
                 new_node_id = request["new_node_id"]
                 keys_to_give = self._find_keys_for_node(new_node_id)
-                response["keys"] = keys_to_give
+                response["keys"] = _serialize_for_json(keys_to_give)
+                print(f"[Node {self.node_id}] Transferring keys to {new_node_id}: {response["keys"]}")
+                
                 # Remove them from local store
                 for k_str in keys_to_give.keys():
                     k_int = int(k_str)
@@ -207,7 +209,7 @@ class ChordNode:
             })
             print(f"[Node {self.node_id}] Notified successor {self.successor} of new predecessor status: {status}")
             # self.fix_fingers()
-            
+            self._acquire_responsible_keys()
         else:
             # fallback
             self.successor = (self.node_id, self.host, self.port)
@@ -458,17 +460,40 @@ class ChordNode:
         self.predecessor = tuple(new_predecessor)
 
     def _acquire_responsible_keys(self):
-        """If you wanted to explicitly fetch keys from your successor."""
+        """
+        If you wanted to explicitly fetch keys from your successor.
+        Expects the successor to return something like:
+            {
+                "keys": {
+                    "234": {
+                        "Like a Rolling Stone": ["127.0.0.1:5000"]
+                    }
+                }
+            }
+        """
         succ_id, succ_host, succ_port = self.successor
         request = {
             "cmd": "TRANSFER_KEYS",
             "new_node_id": self.node_id
         }
         resp = self._send(succ_host, succ_port, request)
+        print("RESPONSE from TRANSFER_KEYS:", resp)
+
         keys_to_move = resp.get("keys", {})
         print(f"[Node {self.node_id}] Acquiring keys from {succ_id}: {keys_to_move}")
-        for k_int, val in keys_to_move.items():
-            self.data_store[k_int] = val
+
+        # Convert keys to integers and lists to sets (if needed):
+        for k_int_str, nested_dict in keys_to_move.items():
+            k_int = int(k_int_str)  # Convert "234" -> 234
+
+            # Convert any list inside nested_dict back to a set (if that’s desired)
+            # For example: { "Like a Rolling Stone": ["127.0.0.1:5000"] } -> set(...)
+            for key_in_nested, val_in_nested in nested_dict.items():
+                if isinstance(val_in_nested, list):
+                    nested_dict[key_in_nested] = set(val_in_nested)
+
+            self.data_store[k_int] = nested_dict
+
 
     def _find_keys_for_node(self, new_node_id: int) -> dict:
         """Return a dict of all keys that belong to new_node_id."""
