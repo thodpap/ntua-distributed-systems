@@ -47,10 +47,6 @@ class ChordNode:
             self.successor = (self.node_id, self.host, self.port)
             self.predecessor = (self.node_id, self.host, self.port)
 
-        # Periodically fix fingers / stabilize in background
-        t_stabilize = threading.Thread(target=self.stabilize_loop, daemon=True)
-        t_stabilize.start()
-
         # Start accepting connections
         t_accept = threading.Thread(target=self.accept_connections, daemon=True)
         t_accept.start()
@@ -94,13 +90,6 @@ class ChordNode:
             response["successor"] = successor_info
             response["predecessor"] = self.predecessor
 
-        elif cmd == "NOTIFY":
-            # Another node is telling us that it might be our predecessor
-            candidate_id = request["candidate_id"]
-            candidate_host = request["candidate_host"]
-            candidate_port = request["candidate_port"]
-            self.notify((candidate_id, candidate_host, candidate_port))
-
         elif cmd == "PUT":
             key = request["key"]
             value = request["value"]
@@ -109,7 +98,12 @@ class ChordNode:
 
         elif cmd == "GET":
             key = request["key"]
-            result = self.chord_get(key)
+            if key == "*":
+                # Get all keys
+                start_node_id = request.get("start_node_id", self.node_id)
+                result = self.chord_get_all(start_node_id)
+            else:
+                result = self.chord_get(key)
             response["value"] = result
             
         elif cmd == "DELETE":
@@ -126,6 +120,7 @@ class ChordNode:
             succ, pred = self.find_successor(new_node_id)
             print(f"[Node {self.node_id}] Join request from {new_node_id} via {new_node_host}:{new_node_port}")
             print(succ, pred)
+            self.fix_fingers()
             response["successor"] = succ
             response["predecessor"] = pred
         elif cmd == "DEPART":
@@ -133,8 +128,20 @@ class ChordNode:
             response["status"] = "departing"
         elif cmd == "UPDATE_SUCCESSOR":
             self._update_successor((request["new_succ_id"], request["new_succ_host"], request["new_succ_port"]))
+            self.fix_fingers()
         elif cmd == "UPDATE_PREDECESSOR":
             self._update_predecessor((request["new_pred_id"], request["new_pred_host"], request["new_pred_port"]))
+            self.fix_fingers()
+        elif cmd == "TRANSFER_KEYS":
+            # A node was added to the ring, and we need to transfer values to it from its successor
+            new_node_id = request["new_node_id"]
+            keys_to_give = self._find_keys_for_node(new_node_id)
+            response["keys"] = keys_to_give
+            # Remove them from local store
+            for k_str in keys_to_give.keys():
+                k_int = int(k_str)
+                self.data_store.pop(k_int, None)
+
         try:
             # Send response
             client_sock.sendall(json.dumps(response).encode('utf-8'))
@@ -255,41 +262,6 @@ class ChordNode:
             if in_interval(cand_id, pred_id, self.node_id):
                 self.predecessor = candidate
 
-    def stabilize_loop(self):
-        """
-        Periodically runs stabilize and fix_fingers in background.
-        """
-        import time
-        while True:
-            # self.stabilize()
-            self.fix_fingers()
-            time.sleep(1)
-
-    def stabilize(self):
-        """
-        Confirm our successor and let it know about us.
-        """
-        succ_id, succ_host, succ_port = self.successor
-
-        # Get successor's predecessor
-        resp = self._send(succ_host, succ_port, {
-            "cmd": "GET_NODE_INFO"
-        })
-        succ_pred = resp.get("predecessor")
-
-        if succ_pred is not None:
-            sp_id, sp_host, sp_port = succ_pred
-            if in_interval(sp_id, self.node_id, succ_id):
-                self.successor = (sp_id, sp_host, sp_port)
-
-        # Notify our successor of our existence
-        self._send(self.successor[1], self.successor[2], {
-            "cmd": "NOTIFY",
-            "candidate_id": self.node_id,
-            "candidate_host": self.host,
-            "candidate_port": self.port
-        })
-
     def fix_fingers(self):
         """
         Update finger table entries.
@@ -339,6 +311,32 @@ class ChordNode:
             })
             return resp.get("value", [])
 
+    def chord_get_all(self, start_node_id):
+        """
+        Retrieve all key-value pairs stored in the ring.
+        """
+        node_id, node_host, node_port = self.successor
+        if node_id == start_node_id:
+            print(f"[Node {self.node_id}] GET * from {node_id} (local) : {self.data_store}")
+            return {
+                self.node_id: str(self.data_store)
+            }
+                
+
+        resp = self._send(node_host, node_port, {
+            "cmd": "GET",
+            "key": "*",
+            start_node_id: start_node_id
+        })
+        print("RESP", resp)
+        # Concat the results with my table
+        result = {
+            **resp["value"],
+            self.node_id: str(self.data_store)
+        }
+        print(f"[Node {self.node_id}] GET * from {node_id} forwards to {node_host}:{node_port} : {resp}")
+        return result
+    
     def chord_delete(self, key: str, value: str):
         """
         Delete the key-value pair from the correct node in the ring.
@@ -386,6 +384,29 @@ class ChordNode:
     def _update_predecessor(self, new_predecessor):
         self.predecessor = tuple(new_predecessor)
 
+    def _acquire_responsible_keys(self):
+        succ_id, succ_host, succ_port = self.successor
+        request = {
+            "cmd": "TRANSFER_KEYS",
+            "new_node_id": self.node_id
+            # We could also pass predecessor_id if needed, or rely on the successor's local chord logic
+        }
+        resp = self._send(succ_host, succ_port, request)
+        keys_to_move = resp.get("keys", {})
+        
+        print(f"[Node {self.node_id}] Acquiring keys from {succ_id}: {keys_to_move}")
+        
+        # Insert them into our data store
+        for k_int, val in keys_to_move.items():
+            self.data_store[k_int] = val
+            
+    def _find_keys_for_node(self, new_node_id: int) -> dict:
+        dispatch_data = {}
+        
+        for k_int, _list in self.data_store.items():
+            if in_interval(k_int, self.node_id, new_node_id):
+                dispatch_data[k_int] = _list
+        return dispatch_data
 
 def run_node(host, port, bootstrap_host=None, bootstrap_port=None):
     """
