@@ -1,6 +1,7 @@
 import argparse
 import json
 import socket
+from pprint import pprint
 
 BUFF_SIZE = 1024
 
@@ -19,7 +20,7 @@ def send_request(host, port, request_dict):
         else:
             return {}
     except Exception as e:
-        print(f"Error connecting to {host}:{port} -> {e}")
+        pprint(f"Error connecting to {host}:{port} -> {e}")
         return {}
 
 def main():
@@ -38,7 +39,7 @@ def main():
     cmd = args.command.upper()
     if cmd == "PUT":
         if not args.key_or_value or not args.value:
-            print("Usage: cli.py PUT <key> <value> [--host <host>] [--port <port>]")
+            pprint(f"Usage: cli.py PUT <key> <value> [--host <host>] [--port <port>]")
             return
         request = {
             "cmd": "PUT",
@@ -46,18 +47,18 @@ def main():
             "value": args.value
         }
         response = send_request(args.host, args.port, request)
-        print("PUT response:", response)
+        pprint(f"PUT response:")
+        pprint(response)
 
     elif cmd == "GET":
         if not args.key_or_value:
-            print("Usage: cli.py GET <key> [--host <host>] [--port <port>]")
+            pprint(f"Usage: cli.py GET <key> [--host <host>] [--port <port>]")
             return
         request = {
             "cmd": "GET",
             "key": args.key_or_value
         }
         response = send_request(args.host, args.port, request)
-        print("GET response:", response)
 
     elif cmd == "INFO":
         # Show node info: ID, predecessor, successor, finger table
@@ -65,10 +66,11 @@ def main():
             "cmd": "GET_NODE_INFO"
         }
         response = send_request(args.host, args.port, request)
-        print("INFO response:", response)
+        pprint(f"INFO response:")
+        pprint(response)
     elif cmd == "DELETE":
         if not args.key_or_value:
-            print("Usage: cli.py DELETE <key> [--host] [--port]")
+            pprint(f"Usage: cli.py DELETE <key> [--host] [--port]")
             return
         request = {
             "cmd": "DELETE",
@@ -76,8 +78,9 @@ def main():
             "value": args.value
         }
         response = send_request(args.host, args.port, request)
-        print("DELETE response:", response)
+        pprint(f"DELETE response:")
+        pprint(response)
     else:
-        print(f"Unknown command: {cmd}")
+        pprint(f"Unknown command: {cmd}")
 if __name__ == "__main__":
     main()
