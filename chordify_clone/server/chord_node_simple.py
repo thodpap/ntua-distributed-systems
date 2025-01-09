@@ -93,6 +93,7 @@ class ChordNode:
                 response["node_id"] = self.node_id
                 response["successor"] = self.successor
                 response["predecessor"] = self.predecessor
+                print(self.data_store)
                 # response["finger_table"] = self.finger_table
 
             elif cmd == "FIND_SUCCESSOR":
@@ -237,16 +238,6 @@ class ChordNode:
         succ_id, succ_host, succ_port = self.successor
         pred_id, pred_host, pred_port = self.predecessor if self.predecessor else (None, None, None)
 
-        # Transfer data to successor
-        for key_id, value in self.data_store.items():
-            for key, itm_value in value.items():
-                ret = self._send(succ_host, succ_port, {
-                    "cmd": "PUT",
-                    "key": key,
-                    "value": list(itm_value)
-                })
-        self.data_store.clear()
-
         # Notify predecessor & successor to link each other
         if pred_id is not None and (pred_id != self.node_id):
             print(f"Notifying predecessor {pred_id} for its new successor: {succ_id}")
@@ -265,6 +256,15 @@ class ChordNode:
                 "new_pred_host": pred_host,
                 "new_pred_port": pred_port
             })
+        # Transfer data to successor
+        for key_id, value in self.data_store.items():
+            for key, itm_value in value.items():
+                ret = self._send(succ_host, succ_port, {
+                    "cmd": "PUT",
+                    "key": key,
+                    "value": list(itm_value)
+                })
+        self.data_store.clear()
 
         print(f"[Node {self.node_id}] Closing socket and shutting down.")
         self.server_sock.close()
@@ -363,7 +363,7 @@ class ChordNode:
         
         return succ_info, pred_info
 
-    def chord_put(self, key: str, value: str):
+    def chord_put(self, key: str, value: str | list):
         key_id = chord_hash(key)
         (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if node_id == self.node_id:
@@ -372,7 +372,10 @@ class ChordNode:
                 self.data_store[key_id] = {}
             if key not in self.data_store[key_id]:
                 self.data_store[key_id][key] = set()
-            self.data_store[key_id][key].add(value)
+            if isinstance(value, list):
+                self.data_store[key_id][key].update(value)
+            else:
+                self.data_store[key_id][key].add(value)
         else:
             print(f"[Node {self.node_id}] Forward PUT {key} -> {value} to {node_id}")
             self._send(node_host, node_port, {
