@@ -45,20 +45,10 @@ class ChordNode:
             self.successor = (self.node_id, self.host, self.port)
             self.predecessor = (self.node_id, self.host, self.port)
 
-        # Start a background thread to periodically stabilize & fix fingers to fix broken nodes
-        # t_stabilize = threading.Thread(target=self._periodic_tasks, daemon=True)
-        # t_stabilize.start()
-
         # Start accepting connections
         t_accept = threading.Thread(target=self.accept_connections, daemon=True)
         t_accept.start()
 
-    def _periodic_tasks(self):
-        """ Periodically call stabilize and fix_fingers. """
-        while True:
-            # self.stabilize()
-            self.fix_fingers()
-            time.sleep(2)  # frequency of these checks
 
     def accept_connections(self):
         while True:
@@ -270,50 +260,6 @@ class ChordNode:
         self.server_sock.close()
         sys.exit(0)
 
-    def stabilize(self):
-        """
-        Periodically verify our immediate successor
-        and tell the successor about ourselves.
-        """
-        if self.successor is None or self.successor[0] == self.node_id:
-            return
-
-        # 1. Ask successor for its predecessor
-        resp = self._send(self.successor[1], self.successor[2], {
-            "cmd": "GET_NODE_INFO"
-        })
-        if not resp:
-            return
-
-        x = resp.get("predecessor")  # x is (x_id, x_host, x_port)
-        if x:
-            x_id, x_host, x_port = x
-            # 2. If x is "between" (self, successor), x might be a better successor
-            if in_interval(x_id, self.node_id, self.successor[0]):
-                self.successor = (x_id, x_host, x_port)
-
-        # 3. Notify our successor that we might be its predecessor
-        if self.successor[0] != self.node_id:
-            self._send(self.successor[1], self.successor[2], {
-                "cmd": "NOTIFY",
-                "candidate": (self.node_id, self.host, self.port)
-            })
-
-    def notify(self, candidate):
-        """
-        Called by 'candidate' node that thinks it might be our predecessor.
-        We update our predecessor if 'candidate' is indeed between our old
-        predecessor and ourselves.
-        """
-        if candidate is None:
-            return
-        if self.predecessor is None:
-            self.predecessor = candidate
-        else:
-            pred_id, _, _ = self.predecessor
-            cand_id, _, _ = candidate
-            if in_interval(cand_id, pred_id, self.node_id):
-                self.predecessor = candidate
 
     def find_successor(self, key_id: int):
         succ_id, succ_host, succ_port = self.successor
