@@ -59,7 +59,8 @@ def main():
             "key": args.key_or_value
         }
         response = send_request(args.host, args.port, request)
-
+        print(f"GET response:")
+        pprint(response)
     elif cmd == "INFO":
         # Show node info: ID, predecessor, successor, finger table
         request = {
