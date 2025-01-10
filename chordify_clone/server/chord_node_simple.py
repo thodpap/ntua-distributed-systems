@@ -382,7 +382,7 @@ class ChordNode:
                 "key": key,
                 "value": value,
                 "start_node_id": start_node_id,
-                "ttl": self.replication_factor
+                "ttl": self.replication_factor - 1
             })
             return
             
@@ -580,7 +580,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--bootstrap_host", type=str, default=None)
     parser.add_argument("--bootstrap_port", type=int, default=None)
-    parser.add_argument("--replication_factor", type=int, default=1)
+    parser.add_argument("--replication_factor", type=int, default=3)
     
     args = parser.parse_args()
 
