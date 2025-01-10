@@ -25,9 +25,9 @@ def send_request(host, port, request_dict):
 
 def main():
     parser = argparse.ArgumentParser(description="CLI to interact with a Chord DHT node.")
-    parser.add_argument("command", type=str, help="Command to run: PUT, GET, INFO, DELETE")
-    parser.add_argument("key_or_value", type=str, nargs="?", help="Key (for GET/PUT), or unused for INFO")
-    parser.add_argument("value", type=str, nargs="?", help="Value (for PUT)")
+    parser.add_argument("command", type=str, help="Command to run: insert, delete, query, depart, overlay, info, help")
+    parser.add_argument("key_or_value", type=str, nargs="?", help="Key (for query, insert or delete), or unused for INFO")
+    parser.add_argument("value", type=str, nargs="?", help="Value (for insert)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Node host")
     parser.add_argument("--port", type=int, default=5000, help="Node port")
 
@@ -37,9 +37,9 @@ def main():
         args.value = f"{args.host}:{args.port}"
     
     cmd = args.command.upper()
-    if cmd == "PUT":
+    if cmd == "INSERT":
         if not args.key_or_value or not args.value:
-            pprint(f"Usage: cli.py PUT <key> <value> [--host <host>] [--port <port>]")
+            pprint(f"Usage: cli.py INSERT <key> <value> [--host <host>] [--port <port>]")
             return
         request = {
             "cmd": "PUT",
@@ -50,9 +50,9 @@ def main():
         pprint(f"PUT response:")
         pprint(response)
 
-    elif cmd == "GET":
+    elif cmd == "QUERY":
         if not args.key_or_value:
-            pprint(f"Usage: cli.py GET <key> [--host <host>] [--port <port>]")
+            pprint(f"Usage: cli.py query <key> [--host <host>] [--port <port>]")
             return
         request = {
             "cmd": "GET",
@@ -81,6 +81,29 @@ def main():
         response = send_request(args.host, args.port, request)
         pprint(f"DELETE response:")
         pprint(response)
+    elif cmd == "OVERLAY":
+        request = {
+            "cmd": "GET_OVERLAY"
+        }
+        response = send_request(args.host, args.port, request)
+        pprint(f"OVERLAY response:")
+        pprint(response)
+    elif cmd == "DEPART":
+        request = {
+            "cmd": "DEPART"
+        }
+        response = send_request(args.host, args.port, request)
+        pprint(f"DEPART response:")
+        pprint(response)
+    elif cmd == "HELP":
+        pprint("Commands:")
+        pprint("  insert <key> <value> [--host <host>] [--port <port>]")
+        pprint("  query <key> [--host <host>] [--port <port>]")
+        pprint("  delete <key> [--host <host>] [--port <port>]")
+        pprint("  overlay [--host <host>] [--port <port>]")
+        pprint("  info [--host <host>] [--port <port>]")
+        pprint("  depart [--host <host>] [--port <port>]")
+        
     else:
         pprint(f"Unknown command: {cmd}")
 if __name__ == "__main__":
