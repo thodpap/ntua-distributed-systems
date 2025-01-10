@@ -84,7 +84,7 @@ class ChordNode:
                 response["node_id"] = self.node_id
                 response["successor"] = self.successor
                 response["predecessor"] = self.predecessor
-                print(self.data_store)
+                print("DATA STORE", self.data_store)
                 # response["finger_table"] = self.finger_table
 
             elif cmd == "FIND_SUCCESSOR":
@@ -114,9 +114,9 @@ class ChordNode:
                     result = self.chord_get_all(start_node_id)
                 else:
                     result, id = self.chord_get(key)
-                    print(result, type(result))
+                    response["id"] = id
+                
                 response["value"] = result
-                response["id"] = id
 
             elif cmd == "DELETE":
                 key = request.get("key", None)
@@ -372,7 +372,7 @@ class ChordNode:
         if node_id == start_node_id:
             print(f"[Node {self.node_id}] GET * local: {self.data_store}")
             return {
-                self.node_id: str(self.data_store)
+                self.node_id: _serialize_for_json(self.data_store)
             }
         resp = self._send(node_host, node_port, {
             "cmd": "GET",
@@ -381,7 +381,7 @@ class ChordNode:
         })
         result = {
             **resp["value"],
-            self.node_id: str(self.data_store)
+            self.node_id: _serialize_for_json(self.data_store)
         }
         return result
 
