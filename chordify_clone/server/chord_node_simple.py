@@ -160,6 +160,22 @@ class ChordNode:
                 for k_str in keys_to_give.keys():
                     k_int = int(k_str)
                     self.data_store.pop(k_int, None)
+            
+            elif cmd == "GET_OVERLAY":
+                if "start_node_id" not in request:
+                    start_node_id = self.node_id
+                else:
+                    start_node_id = request["start_node_id"]
+                
+                response["overlay"] = self.chord_overlay(start_node_id)
+                
+            elif cmd == 'DEPART': 
+                response["status"] = "departing"
+                client_sock.sendall(json.dumps(response).encode('utf-8'))
+                client_sock.close()
+                self.depart()
+                return
+                
             else:
                 response["error"] = "Unknown command"
             
@@ -387,6 +403,35 @@ class ChordNode:
                 "value": value
             })
             return resp.get("status", "ERROR")
+
+    def chord_overlay(self, start_node_id):
+        """
+        Return a list of dicts representing the current state of the Chord ring.
+        Each dict contains information from a single node.
+        """
+        # Initialize the overlay with the current node's information
+        overlay = [
+            {
+                "node_id": self.node_id,
+                "successor": self.successor,
+                "predecessor": self.predecessor,
+                "data_store": self.data_store
+            }
+        ]
+
+        # If the successor is the start node, we've completed the circle
+        if self.successor[0] == start_node_id:
+            return overlay
+
+        # Otherwise, fetch the overlay information from the successor
+        resp = self._send(self.successor[1], self.successor[2], {
+            "cmd": "GET_OVERLAY",
+            "start_node_id": start_node_id
+        })
+
+        # Add the received overlay data to our list
+        overlay.extend(resp.get("overlay", []))
+        return overlay
 
     def _send(self, host, port, message_dict):
         try:
