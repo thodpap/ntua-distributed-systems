@@ -10,9 +10,10 @@ import time
 BUFF_SIZE = 1024
 
 class ChordNode:
-    def __init__(self, host: str, port: int, bootstrap_host: Optional[str] = None, bootstrap_port: Optional[int] = None):
+    def __init__(self, host: str, port: int, bootstrap_host: Optional[str] = None, bootstrap_port: Optional[int] = None, replication_factor: int = 1):
         self.host = host
         self.port = port
+        self.replication_factor = replication_factor
 
         # Each node has an ID in the range [0, 2^M)
         self.node_id = chord_hash(f"{host}:{port}")
@@ -103,7 +104,8 @@ class ChordNode:
                 key = request["key"]
                 value = request["value"]
                 start_node_id = request.get("start_node_id", self.node_id)
-                self.chord_put(key, value, start_node_id)
+                ttl = request.get("ttl", None)
+                self.chord_put(key, value, start_node_id, ttl)
                 response["status"] = "OK"
 
             elif cmd == "GET":
@@ -324,30 +326,73 @@ class ChordNode:
         
         return succ_info, pred_info
 
-    def chord_put(self, key: str, value: str | list, start_node_id: int):
-        if self.node_id == start_node_id:
-            self.uploaded_songs.append(key)
-
+    def chord_put(self, key: str, value: str | list, start_node_id: int, ttl: int = None):
+        if ttl == 0: return
+        
         key_id = chord_hash(key)
-        (node_id, node_host, node_port), _ = self.find_successor(key_id)
-        if node_id == self.node_id:
-            print(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
-            if key_id not in self.data_store:
-                self.data_store[key_id] = {}
-            if key not in self.data_store[key_id]:
-                self.data_store[key_id][key] = set()
-            if isinstance(value, list):
-                self.data_store[key_id][key].update(value)
-            else:
-                self.data_store[key_id][key].add(value)
-        else:
-            print(f"[Node {self.node_id}] Forward PUT {key} -> {value} to {node_id}")
-            self._send(node_host, node_port, {
+        
+        if self.replication_factor and ttl:
+            # We need to update the successor node as well
+            self._store_new_value(key_id, key, value)
+            succ_id, succ_host, succ_port = self.successor
+            
+            print(f"[Node {self.node_id}] REPLICATE PUT {key} -> {value} to {succ_id} with TTL {ttl}, {start_node_id}")
+            if succ_id == start_node_id:
+                print(f"[Node {self.node_id}] TTL {ttl} for {key} reached")
+                return
+            
+            if ttl == 1:
+                return
+            print(f"[Node {self.node_id}] REPLICATE PUT {key} -> {value} to {succ_id}")
+            self._send(succ_host, succ_port, {
                 "cmd": "PUT",
                 "key": key,
                 "value": value,
-                "start_node_id": start_node_id
+                "start_node_id": start_node_id,
+                "ttl": ttl - 1
             })
+            return
+        
+        (node_id, node_host, node_port), _ = self.find_successor(key_id)
+        if self.node_id == start_node_id:
+            self.uploaded_songs.append(key)
+
+        if node_id == self.node_id:
+            # We reached the primary node for the key_id
+            print(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
+            self._store_new_value(key_id, key, value)
+            
+            print(f"the self.replication is {self.replication_factor} and ttl is {ttl}")
+            
+            if not self.replication_factor:
+                print("WE DONT HAVE REPLICATION")
+                # If replication factor is None or it's zero we are done.
+                return
+            
+            # That was the first put, we need to replicate it
+            # We need to update the successor node as well
+            succ_id, succ_host, succ_port = self.successor
+            if succ_id == start_node_id:
+                print("SUCC_ID == START_NODE_ID")
+                return
+        
+            print(f"[Node {self.node_id}] REPLICATE PUT {key} -> {value} to {succ_id} with TTL {self.replication_factor}, {start_node_id}")
+            self._send(succ_host, succ_port, {
+                "cmd": "PUT",
+                "key": key,
+                "value": value,
+                "start_node_id": start_node_id,
+                "ttl": self.replication_factor
+            })
+            return
+            
+        print(f"[Node {self.node_id}] Forward PUT {key} -> {value} to {node_id} = {ttl}, {self.replication_factor}")
+        self._send(node_host, node_port, {
+            "cmd": "PUT",
+            "key": key,
+            "value": value,
+            "start_node_id": start_node_id
+        })
 
     def chord_get(self, key: str):
         key_id = chord_hash(key)
@@ -485,10 +530,8 @@ class ChordNode:
             k_int = int(k_int_str)  # Convert "234" -> 234
 
             # Convert any list inside nested_dict back to a set (if that’s desired)
-            # For example: { "Like a Rolling Stone": ["127.0.0.1:5000"] } -> set(...)
-            for key_in_nested, val_in_nested in nested_dict.items():
-                if isinstance(val_in_nested, list):
-                    nested_dict[key_in_nested] = set(val_in_nested)
+            # For example: { "Like a Rolling Stone": ["127.0.0.1:5000"] } -> set(...)[Node 88] REPLICATE PUT Like a Rolling Stone -> 127.0.0.1:5000 to 119 with TTL 1                                       │[Node 119] Forward PUT Like a Rolling Stone -> 127.0.0.1:5000 to 29
+
 
             self.data_store[k_int] = nested_dict
 
@@ -502,12 +545,21 @@ class ChordNode:
                 dispatch_data[k_int] = kv_dict
         return dispatch_data
 
+    def _store_new_value(self, key_id, key, value):
+        if key_id not in self.data_store:
+            self.data_store[key_id] = {}
+        if key not in self.data_store[key_id]:
+            self.data_store[key_id][key] = set()
+        if isinstance(value, list):
+            self.data_store[key_id][key].update(value)
+        else:
+            self.data_store[key_id][key].add(value)
 
-def run_node(host, port, bootstrap_host=None, bootstrap_port=None):
+def run_node(host, port, bootstrap_host=None, bootstrap_port=None, replication_factor=1):
     """
     Simple wrapper to instantiate ChordNode and keep it running.
     """
-    node = ChordNode(host, port, bootstrap_host, bootstrap_port)
+    node = ChordNode(host, port, bootstrap_host, bootstrap_port, replication_factor)
 
     def signal_handler(sig, frame):
         print('Shutting down node...')
@@ -528,11 +580,14 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--bootstrap_host", type=str, default=None)
     parser.add_argument("--bootstrap_port", type=int, default=None)
+    parser.add_argument("--replication_factor", type=int, default=1)
+    
     args = parser.parse_args()
 
     run_node(
         host=args.host,
         port=args.port,
         bootstrap_host=args.bootstrap_host,
-        bootstrap_port=args.bootstrap_port
+        bootstrap_port=args.bootstrap_port,
+        replication_factor=args.replication_factor
     )
