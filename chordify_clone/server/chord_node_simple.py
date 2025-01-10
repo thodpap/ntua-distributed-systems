@@ -21,6 +21,7 @@ class ChordNode:
         self.successor = (self.node_id, self.host, self.port)
         self.predecessor = None
 
+        self.uploaded_songs = []
         # Finger table
         # self.finger_table = [(None, None)] * M
         
@@ -101,7 +102,8 @@ class ChordNode:
             elif cmd == "PUT":
                 key = request["key"]
                 value = request["value"]
-                self.chord_put(key, value)
+                start_node_id = request.get("start_node_id", self.node_id)
+                self.chord_put(key, value, start_node_id)
                 response["status"] = "OK"
 
             elif cmd == "GET":
@@ -226,20 +228,17 @@ class ChordNode:
               f"& got successor {self.successor}")
         print(f"[Node {self.node_id}] Predecessor: {self.predecessor}")
 
-        # NEW: Immediately notify our successor, so it can update its predecessor if needed
-        if self.successor[0] != self.node_id:
-            self._send(self.successor[1], self.successor[2], {
-                "cmd": "NOTIFY",
-                "candidate": (self.node_id, self.host, self.port)
-            })
-
     def depart(self):
         """
         Gracefully remove this node from the Chord ring.
-        1. Transfer data to successor.
-        2. Notify predecessor and successor to link each other.
-        3. Close server socket.
+        1. Delete the songs that have been uploaded by this node.
+        2. Transfer data to successor.
+        3. Notify predecessor and successor to link each other.
+        4. Close server socket.
         """
+        ret = [self.chord_delete(song, f"{self.host}:{self.port}") for song in self.uploaded_songs]
+        print("Deleted songs' status:",list(zip(self.uploaded_songs, ret)))
+        
         print(f"[Node {self.node_id}] Departing the ring...")
         succ_id, succ_host, succ_port = self.successor
         pred_id, pred_host, pred_port = self.predecessor if self.predecessor else (None, None, None)
@@ -325,7 +324,10 @@ class ChordNode:
         
         return succ_info, pred_info
 
-    def chord_put(self, key: str, value: str | list):
+    def chord_put(self, key: str, value: str | list, start_node_id: int):
+        if self.node_id == start_node_id:
+            self.uploaded_songs.append(key)
+
         key_id = chord_hash(key)
         (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if node_id == self.node_id:
@@ -343,7 +345,8 @@ class ChordNode:
             self._send(node_host, node_port, {
                 "cmd": "PUT",
                 "key": key,
-                "value": value
+                "value": value,
+                "start_node_id": start_node_id
             })
 
     def chord_get(self, key: str):
@@ -355,7 +358,7 @@ class ChordNode:
                 value = self.data_store[key_id][key]
                 return list(value), self.node_id
                 # return list(self.data_store[key_id][key])
-            return []
+            return [], -1
         else:
             print(f"[Node {self.node_id}] Forward GET {key} to {node_id}")
             resp = self._send(node_host, node_port, {
@@ -415,7 +418,8 @@ class ChordNode:
                 "node_id": self.node_id,
                 "successor": self.successor,
                 "predecessor": self.predecessor,
-                "data_store": self.data_store
+                "data_store": _serialize_for_json(self.data_store),
+                "uploaded_songs": self.uploaded_songs
             }
         ]
 
