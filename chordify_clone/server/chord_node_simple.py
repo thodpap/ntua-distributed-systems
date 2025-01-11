@@ -14,7 +14,7 @@ class ChordNode:
         port: int,
         bootstrap_host: Optional[str] = None,
         bootstrap_port: Optional[int] = None,
-        replication_factor: int = 1
+        replication_factor: int = 1 # No replication at all
     ):
         # Core state
         self.host = host
@@ -48,7 +48,6 @@ class ChordNode:
             self.successor = tuple(successor_info["successor"])
             self.predecessor = tuple(successor_info["predecessor"])
             
-            print("notify predecessor and successor")
             # Notify predecessor and notify successor
             status = self._send(self.predecessor[1], self.predecessor[2], {
                 "cmd": "UPDATE_SUCCESSOR",
@@ -72,8 +71,7 @@ class ChordNode:
             self.predecessor = (self.node_id, self.host, self.port)
 
         print(f"[Node {self.node_id}] Joined ring via {bootstrap_host}:{bootstrap_port} "
-              f"& got successor {self.successor}")
-        print(f"[Node {self.node_id}] Predecessor: {self.predecessor}")
+              f"& got successor {self.successor} & Predecessor: {self.predecessor}")
 
     def depart(self):
         """
@@ -172,27 +170,7 @@ class ChordNode:
         
         key_id = chord_hash(key)
         
-        if self.replication_factor and ttl:
-            # We need to update the successor node as well
-            self._store_new_value(key_id, key, value)
-            succ_id, succ_host, succ_port = self.successor
-            
-            print(f"[Node {self.node_id}] REPLICATE PUT {key} -> {value} to {succ_id} with TTL {ttl}, {start_node_id}")
-            if succ_id == start_node_id:
-                print(f"[Node {self.node_id}] TTL {ttl} for {key} reached")
-                return
-            
-            if ttl == 1:
-                return
-            print(f"[Node {self.node_id}] REPLICATE PUT {key} -> {value} to {succ_id}")
-            self._send(succ_host, succ_port, {
-                "cmd": "PUT",
-                "key": key,
-                "value": value,
-                "start_node_id": start_node_id,
-                "ttl": ttl - 1
-            })
-            return
+        if self._chain_replicate_with_ttl(start_node_id, key_id, key, value, "PUT", ttl): return
         
         (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if self.node_id == start_node_id:
@@ -202,29 +180,7 @@ class ChordNode:
             # We reached the primary node for the key_id
             print(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
             self._store_new_value(key_id, key, value)
-            
-            print(f"the self.replication is {self.replication_factor} and ttl is {ttl}")
-            
-            if not self.replication_factor:
-                print("WE DONT HAVE REPLICATION")
-                # If replication factor is None or it's zero we are done.
-                return
-            
-            # That was the first put, we need to replicate it
-            # We need to update the successor node as well
-            succ_id, succ_host, succ_port = self.successor
-            if succ_id == start_node_id:
-                print("SUCC_ID == START_NODE_ID")
-                return
-        
-            print(f"[Node {self.node_id}] REPLICATE PUT {key} -> {value} to {succ_id} with TTL {self.replication_factor}, {start_node_id}")
-            self._send(succ_host, succ_port, {
-                "cmd": "PUT",
-                "key": key,
-                "value": value,
-                "start_node_id": start_node_id,
-                "ttl": self.replication_factor - 1
-            })
+            self._chain_replicate_without_ttl(start_node_id, key, value, "PUT")
             return
             
         print(f"[Node {self.node_id}] Forward PUT {key} -> {value} to {node_id} = {ttl}, {self.replication_factor}")
@@ -275,16 +231,7 @@ class ChordNode:
         key_id = chord_hash(key)
         (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if node_id == self.node_id:
-            if (key_id in self.data_store and
-                key in self.data_store[key_id] and
-                value in self.data_store[key_id][key]):
-                self.data_store[key_id][key].remove(value)
-                if not self.data_store[key_id][key]:
-                    self.data_store[key_id].pop(key)
-                if not self.data_store[key_id]:
-                    self.data_store.pop(key_id)
-                return "OK"
-            return "NOT_FOUND"
+            self._delete_value(key_id, key, value)
         else:
             resp = self._send(node_host, node_port, {
                 "cmd": "DELETE",
@@ -396,3 +343,63 @@ class ChordNode:
         else:
             self.data_store[key_id][key].add(value)
 
+    def _delete_value(self, key_id, key, value):
+        if (key_id in self.data_store and
+                key in self.data_store[key_id] and
+                value in self.data_store[key_id][key]):
+            self.data_store[key_id][key].remove(value)
+            if not self.data_store[key_id][key]:
+                self.data_store[key_id].pop(key)
+            if not self.data_store[key_id]:
+                self.data_store.pop(key_id)
+            return "OK"
+        return "NOT_FOUND"
+    
+    def _chain_replicate_with_ttl(self, start_node_id, key_id, key, value, cmd, ttl):
+        if not self.replication_factor: return False
+        if not ttl: return False
+        if ttl == 0: return True
+        
+        # We need to update the successor node as well
+        self._store_new_value(key_id, key, value)
+        succ_id, succ_host, succ_port = self.successor
+        
+        print(f"[Node {self.node_id}] REPLICATE PUT {key} -> {value} to {succ_id} with TTL {ttl}, {start_node_id}")
+        if succ_id == start_node_id:
+            print(f"[Node {self.node_id}] TTL {ttl} for {key} reached")
+            return True
+        
+        if ttl <= 1:
+            return True
+        
+        print(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id}")
+        if cmd == "PUT":
+            self._send(succ_host, succ_port, {
+                "cmd": cmd,
+                "key": key,
+                "value": value,
+                "start_node_id": start_node_id,
+                "ttl": ttl - 1
+            })
+        return True
+    
+    def _chain_replicate_without_ttl(self, start_node_id, key, value, cmd):
+        if not self.replication_factor:
+            # If replication factor is None or it's zero we are done.
+            return
+        
+        # That was the first put, we need to replicate it
+        # We need to update the successor node as well
+        succ_id, succ_host, succ_port = self.successor
+        if succ_id == start_node_id:
+            return
+    
+        print(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id} with TTL {self.replication_factor}, {start_node_id}")
+        if cmd == "PUT":
+            self._send(succ_host, succ_port, {
+                "cmd": "PUT",
+                "key": key,
+                "value": value,
+                "start_node_id": start_node_id,
+                "ttl": self.replication_factor - 1
+            })
