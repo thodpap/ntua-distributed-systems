@@ -81,7 +81,7 @@ class ChordNode:
         3. Notify predecessor and successor to link each other.
         4. Close server socket.
         """
-        ret = [self.chord_delete(song, f"{self.host}:{self.port}") for song in self.uploaded_songs]
+        ret = [self.chord_delete(song, f"{self.host}:{self.port}", self.node_id, self.replication_factor - 1) for song in self.uploaded_songs]
         print("Deleted songs' status:",list(zip(self.uploaded_songs, ret)))
         
         print(f"[Node {self.node_id}] Departing the ring...")
@@ -227,18 +227,21 @@ class ChordNode:
         }
         return result
 
-    def chord_delete(self, key: str, value: str):
+    def chord_delete(self, key: str, value: str, start_node_id: int, ttl):
         key_id = chord_hash(key)
+        if self._chain_replicate_with_ttl(start_node_id, key_id, key, value, "DELETE", ttl): return
         (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if node_id == self.node_id:
             self._delete_value(key_id, key, value)
-        else:
-            resp = self._send(node_host, node_port, {
-                "cmd": "DELETE",
-                "key": key,
-                "value": value
-            })
-            return resp.get("status", "ERROR")
+            self._chain_replicate_without_ttl(start_node_id, key, value, "DELETE")
+            return "OK"
+        
+        resp = self._send(node_host, node_port, {
+            "cmd": "DELETE",
+            "key": key,
+            "value": value
+        })
+        return resp.get("status", "ERROR")
 
     def chord_overlay(self, start_node_id):
         """
@@ -361,7 +364,11 @@ class ChordNode:
         if ttl == 0: return True
         
         # We need to update the successor node as well
-        self._store_new_value(key_id, key, value)
+        if cmd == "PUT":
+            self._store_new_value(key_id, key, value)
+        elif cmd == "DELETE":
+            self._delete_value(key_id, key, value)
+
         succ_id, succ_host, succ_port = self.successor
         
         print(f"[Node {self.node_id}] REPLICATE PUT {key} -> {value} to {succ_id} with TTL {ttl}, {start_node_id}")
@@ -373,14 +380,13 @@ class ChordNode:
             return True
         
         print(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id}")
-        if cmd == "PUT":
-            self._send(succ_host, succ_port, {
-                "cmd": cmd,
-                "key": key,
-                "value": value,
-                "start_node_id": start_node_id,
-                "ttl": ttl - 1
-            })
+        self._send(succ_host, succ_port, {
+            "cmd": cmd,
+            "key": key,
+            "value": value,
+            "start_node_id": start_node_id,
+            "ttl": ttl - 1
+        })
         return True
     
     def _chain_replicate_without_ttl(self, start_node_id, key, value, cmd):
@@ -395,11 +401,10 @@ class ChordNode:
             return
     
         print(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id} with TTL {self.replication_factor}, {start_node_id}")
-        if cmd == "PUT":
-            self._send(succ_host, succ_port, {
-                "cmd": "PUT",
-                "key": key,
-                "value": value,
-                "start_node_id": start_node_id,
-                "ttl": self.replication_factor - 1
-            })
+        self._send(succ_host, succ_port, {
+            "cmd": cmd,
+            "key": key,
+            "value": value,
+            "start_node_id": start_node_id,
+            "ttl": self.replication_factor - 1
+        })

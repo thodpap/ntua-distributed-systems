@@ -116,7 +116,10 @@ class ChordServer:
             value = request.get("value", None)
             if not key or not value:
                 return {"status": "WRONG_PARAMS"}
-            return {"status": self.node.chord_delete(key, value)}
+            
+            start_node_id = request.get("start_node_id", self.node.node_id)
+            ttl = request.get("ttl", None)
+            return {"status": self.node.chord_delete(key, value, start_node_id, ttl)}
 
         elif cmd == "JOIN":
             new_node_host = request["host"]
