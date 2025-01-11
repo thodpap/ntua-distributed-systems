@@ -108,8 +108,11 @@ class ChordServer:
                 result = self.node.chord_get_all(start_node_id)
                 return {"value": result}
             
-            result, id = self.node.chord_get(key)
-            return {"id": id, "value": result}
+            start_node_id = request.get("start_node_id", self.node.node_id)
+            ttl = request.get("ttl", None)
+            result, id_ = self.node.chord_get(key, start_node_id, ttl)
+            print(f"[Node {self.node.node_id}] GET {key} -> {result}")
+            return {"id": id_, "value": result}
 
         elif cmd == "DELETE":
             key = request.get("key", None)

@@ -81,7 +81,7 @@ class ChordNode:
         3. Notify predecessor and successor to link each other.
         4. Close server socket.
         """
-        ret = [self.chord_delete(song, f"{self.host}:{self.port}", self.node_id, self.replication_factor - 1) for song in self.uploaded_songs]
+        ret = [self.chord_delete(song, f"{self.host}:{self.port}", self.node_id, self.replication_factor - 1 if self.replication_factor else self.replication_factor) for song in self.uploaded_songs]
         print("Deleted songs' status:",list(zip(self.uploaded_songs, ret)))
         
         print(f"[Node {self.node_id}] Departing the ring...")
@@ -191,16 +191,20 @@ class ChordNode:
             "start_node_id": start_node_id
         })
 
-    def chord_get(self, key: str):
+    def chord_get(self, key: str, start_node_id: int, ttl):
         key_id = chord_hash(key)
+        
+        ret_value = self._chain_replicate_with_ttl(start_node_id, key_id, key, None, "GET", ttl)
+        if ret_value:
+            return ret_value
+        
         (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if node_id == self.node_id:
-            # print(self.data_store, self.data_store[key_id][key] or None)
-            if key_id in self.data_store and key in self.data_store[key_id]:
-                value = self.data_store[key_id][key]
-                return list(value), self.node_id
-                # return list(self.data_store[key_id][key])
-            return [], -1
+            if not self.replication_factor: # No replication at all
+                return self._read_value(key_id, key)
+            if self.replication_factor == 1:
+                return self._read_value(key_id, key)
+            return self._chain_replicate_without_ttl(start_node_id, key, None, "GET")        
         else:
             print(f"[Node {self.node_id}] Forward GET {key} to {node_id}")
             resp = self._send(node_host, node_port, {
@@ -358,36 +362,47 @@ class ChordNode:
             return "OK"
         return "NOT_FOUND"
     
+    def _read_value(self, key_id, key):
+        if key_id in self.data_store and key in self.data_store[key_id]:
+            value = self.data_store[key_id][key]
+            return list(value), self.node_id
+            # return list(self.data_store[key_id][key])
+        return [], -1
+    
     def _chain_replicate_with_ttl(self, start_node_id, key_id, key, value, cmd, ttl):
         if not self.replication_factor: return False
         if not ttl: return False
         if ttl == 0: return True
-        
+        ret_value = True
         # We need to update the successor node as well
         if cmd == "PUT":
             self._store_new_value(key_id, key, value)
         elif cmd == "DELETE":
             self._delete_value(key_id, key, value)
+        elif cmd == "GET":
+            ret_value = self._read_value(key_id, key)
 
         succ_id, succ_host, succ_port = self.successor
         
-        print(f"[Node {self.node_id}] REPLICATE PUT {key} -> {value} to {succ_id} with TTL {ttl}, {start_node_id}")
-        if succ_id == start_node_id:
+        print(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id} with TTL {ttl}, {start_node_id}")
+        if succ_id == start_node_id or ttl <= 1:
             print(f"[Node {self.node_id}] TTL {ttl} for {key} reached")
-            return True
+            return ret_value
         
-        if ttl <= 1:
-            return True
+        if ttl == 1:
+            print(f"[Node {self.node_id}] TTL {ttl} for {key} reached")
+            return ret_value
         
         print(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id}")
-        self._send(succ_host, succ_port, {
+        ret = self._send(succ_host, succ_port, {
             "cmd": cmd,
             "key": key,
             "value": value,
             "start_node_id": start_node_id,
             "ttl": ttl - 1
         })
-        return True
+        if "value" in ret and "id" in ret: return ret["value"], ret["id"] # GET SPECIFIC
+        return ret
     
     def _chain_replicate_without_ttl(self, start_node_id, key, value, cmd):
         if not self.replication_factor:
@@ -399,12 +414,14 @@ class ChordNode:
         succ_id, succ_host, succ_port = self.successor
         if succ_id == start_node_id:
             return
-    
+
         print(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id} with TTL {self.replication_factor}, {start_node_id}")
-        self._send(succ_host, succ_port, {
+        ret = self._send(succ_host, succ_port, {
             "cmd": cmd,
             "key": key,
             "value": value,
             "start_node_id": start_node_id,
             "ttl": self.replication_factor - 1
         })
+        if "value" in ret and "id" in ret: return ret["value"], ret["id"] # GET SPECIFIC
+        return ret
