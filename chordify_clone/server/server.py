@@ -151,14 +151,8 @@ class ChordServer:
 
         elif cmd == "TRANSFER_KEYS":
             new_node_id = request["new_node_id"]
-            keys_to_give = self.node._find_keys_for_node(new_node_id)
-            serialize_data = _serialize_for_json(keys_to_give)
-            print(f"[Node {self.node.node_id}] Transferring keys to {new_node_id}: {serialize_data}")
-            
-            # Remove them from local store
-            for k_str in keys_to_give.keys():
-                k_int = int(k_str)
-                self.node.data_store.pop(k_int, None)
+            next_node_id = request.get("next_node_id", None)
+            serialize_data = self.node.chord_transfer_keys(new_node_id, next_node_id)
             
             return {"keys": serialize_data}
         

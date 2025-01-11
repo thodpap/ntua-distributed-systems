@@ -4,8 +4,16 @@ import sys
 import time
 import signal
 import argparse
+import logging
 from chord_node_simple import ChordNode
 from server import ChordServer
+import os
+
+# Ensure the logs directory exists
+os.makedirs("logs", exist_ok=True)
+
+# Configure the root logger
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 def run_node(host, port, bootstrap_host=None, bootstrap_port=None, replication_factor=1):
     """
@@ -16,7 +24,7 @@ def run_node(host, port, bootstrap_host=None, bootstrap_port=None, replication_f
     server.start()  # Start the background thread that accepts incoming connections
 
     def signal_handler(sig, frame):
-        print("[Main] Caught CTRL+C. Shutting down node...")
+        logging.info("[Main] Caught CTRL+C. Shutting down node...")
         node.depart()
         sys.exit(0)
 
@@ -35,6 +43,16 @@ if __name__ == "__main__":
     parser.add_argument("--replication_factor", type=int, default=3)
 
     args = parser.parse_args()
+    
+    # configure logging
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+    # Setup file logging
+    file_handler = logging.FileHandler("logs/" + str(args.port) + ".log")
+    file_handler.setLevel(logging.INFO)  # Set the level for the file handler
+    file_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))  # Optional
+
+    # Add the file handler to the root logger
+    logging.getLogger().addHandler(file_handler)
 
     run_node(
         host=args.host,

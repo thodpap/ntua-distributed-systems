@@ -3,6 +3,7 @@ import threading
 import json
 from typing import Optional
 from utils import chord_hash, M, in_interval, _serialize_for_json, BUFF_SIZE
+import logging
 import sys
 import signal
 import time
@@ -34,7 +35,7 @@ class ChordNode:
         if bootstrap_host and bootstrap_port:
             self.join(bootstrap_host, bootstrap_port)
         else:
-            print("[ChordNode] No bootstrap node provided, creating a new ring.")
+            logging.info("[ChordNode] No bootstrap node provided, creating a new ring.")
 
     def join(self, bootstrap_host: str, bootstrap_port: int):
         """Join the ring via a known bootstrap node."""
@@ -44,7 +45,7 @@ class ChordNode:
             "port": self.port
         })
         if "successor" in successor_info and "predecessor" in successor_info:
-            print(f"[Node {self.node_id}] On join the ring, got info: {successor_info}") 
+            logging.info(f"[Node {self.node_id}] On join the ring, got info: {successor_info}") 
             self.successor = tuple(successor_info["successor"])
             self.predecessor = tuple(successor_info["predecessor"])
             
@@ -55,22 +56,22 @@ class ChordNode:
                 "new_succ_host": self.host,
                 "new_succ_port": self.port
             })
-            print(f"[Node {self.node_id}] Notified predecessor {self.predecessor} of new successor status: {status}")
+            logging.info(f"[Node {self.node_id}] Notified predecessor {self.predecessor} of new successor status: {status}")
             status = self._send(self.successor[1], self.successor[2], {
                 "cmd": "UPDATE_PREDECESSOR",
                 "new_pred_id": self.node_id,
                 "new_pred_host": self.host,
                 "new_pred_port": self.port
             })
-            print(f"[Node {self.node_id}] Notified successor {self.successor} of new predecessor status: {status}")
+            logging.info(f"[Node {self.node_id}] Notified successor {self.successor} of new predecessor status: {status}")
             # self.fix_fingers()
-            self._acquire_responsible_keys()
+            self._acquire_keys(self.node_id, self.node_id)
         else:
             # fallback
             self.successor = (self.node_id, self.host, self.port)
             self.predecessor = (self.node_id, self.host, self.port)
 
-        print(f"[Node {self.node_id}] Joined ring via {bootstrap_host}:{bootstrap_port} "
+        logging.info(f"[Node {self.node_id}] Joined ring via {bootstrap_host}:{bootstrap_port} "
               f"& got successor {self.successor} & Predecessor: {self.predecessor}")
 
     def depart(self):
@@ -82,15 +83,15 @@ class ChordNode:
         4. Close server socket.
         """
         ret = [self.chord_delete(song, f"{self.host}:{self.port}", self.node_id, self.replication_factor - 1 if self.replication_factor else self.replication_factor) for song in self.uploaded_songs]
-        print("Deleted songs' status:",list(zip(self.uploaded_songs, ret)))
+        logging.info(f"Deleted songs' status: {list(zip(self.uploaded_songs, ret))}")
         
-        print(f"[Node {self.node_id}] Departing the ring...")
+        logging.info(f"[Node {self.node_id}] Departing the ring...")
         succ_id, succ_host, succ_port = self.successor
         pred_id, pred_host, pred_port = self.predecessor if self.predecessor else (None, None, None)
 
         # Notify predecessor & successor to link each other
         if pred_id is not None and (pred_id != self.node_id):
-            print(f"Notifying predecessor {pred_id} for its new successor: {succ_id}")
+            logging.info(f"Notifying predecessor {pred_id} for its new successor: {succ_id}")
             self._send(pred_host, pred_port, {
                 "cmd": "UPDATE_SUCCESSOR",
                 "new_succ_id": succ_id,
@@ -99,7 +100,7 @@ class ChordNode:
             })
 
         if succ_id != self.node_id:
-            print(f"Notifying successor {succ_id} for its new predecessor: {pred_id}")
+            logging.info(f"Notifying successor {succ_id} for its new predecessor: {pred_id}")
             self._send(succ_host, succ_port, {
                 "cmd": "UPDATE_PREDECESSOR",
                 "new_pred_id": pred_id,
@@ -149,7 +150,7 @@ class ChordNode:
 
     def fix_fingers(self):
         # You may wish to reduce how verbose this is in production:
-        # print(f"[Node {self.node_id}] Fixing fingers...")
+        # logging.info(f"[Node {self.node_id}] Fixing fingers...")
         for i in range(M):
             start = (self.node_id + 2**i) % (2**M)
             succ_info, prev_info = self.find_successor(start)
@@ -178,12 +179,12 @@ class ChordNode:
 
         if node_id == self.node_id:
             # We reached the primary node for the key_id
-            print(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
             self._store_new_value(key_id, key, value)
             self._chain_replicate_without_ttl(start_node_id, key, value, "PUT")
+            logging.info(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
             return
             
-        print(f"[Node {self.node_id}] Forward PUT {key} -> {value} to {node_id} = {ttl}, {self.replication_factor}")
+        logging.info(f"[Node {self.node_id}] Forward PUT {key} -> {value} to {node_id} = {ttl}, {self.replication_factor}")
         self._send(node_host, node_port, {
             "cmd": "PUT",
             "key": key,
@@ -206,7 +207,7 @@ class ChordNode:
                 return self._read_value(key_id, key)
             return self._chain_replicate_without_ttl(start_node_id, key, None, "GET")        
         else:
-            print(f"[Node {self.node_id}] Forward GET {key} to {node_id}")
+            logging.info(f"[Node {self.node_id}] Forward GET {key} to {node_id}")
             resp = self._send(node_host, node_port, {
                 "cmd": "GET",
                 "key": key
@@ -216,7 +217,7 @@ class ChordNode:
     def chord_get_all(self, start_node_id):
         node_id, node_host, node_port = self.successor
         if node_id == start_node_id:
-            print(f"[Node {self.node_id}] GET * local: {self.data_store}")
+            logging.info(f"[Node {self.node_id}] GET * local: {self.data_store}")
             return {
                 self.node_id: _serialize_for_json(self.data_store)
             }
@@ -226,7 +227,7 @@ class ChordNode:
             "start_node_id": start_node_id
         })
         result = {
-            **resp["value"],
+            **resp.get("value", {}),
             self.node_id: _serialize_for_json(self.data_store)
         }
         return result
@@ -277,6 +278,25 @@ class ChordNode:
         overlay.extend(resp.get("overlay", []))
         return overlay
 
+    def chord_transfer_keys(self, next_node_id, new_node_id):
+        """
+        Transfer keys that belong to new_node_id to the new node.
+        """
+        keys_to_give = self._find_keys_for_node(next_node_id)
+        serialize_data = _serialize_for_json(keys_to_give)
+        logging.info(f"[Node {self.node_id}] Transferring keys to {next_node_id}: {serialize_data}")
+        
+        # Remove them from local store
+        logging.info(f"DELETING ? {new_node_id} != {self.node_id}")
+        if new_node_id != self.node_id:
+            for k_int in keys_to_give.keys():
+                self.data_store.pop(k_int)
+            
+        logging.info(f"[Node {self.node_id}] Transferring keys to {new_node_id}: {serialize_data}")
+        
+        self._acquire_keys(new_node_id, self.node_id)
+        return serialize_data
+        
     def _send(self, host, port, message_dict):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -297,7 +317,7 @@ class ChordNode:
     def _update_predecessor(self, new_predecessor):
         self.predecessor = tuple(new_predecessor)
 
-    def _acquire_responsible_keys(self):
+    def _acquire_keys(self, new_node_id: int = None, next_node_id: int = None):
         """
         If you wanted to explicitly fetch keys from your successor.
         Expects the successor to return something like:
@@ -309,25 +329,22 @@ class ChordNode:
                 }
             }
         """
-        succ_id, succ_host, succ_port = self.successor
+        succ_id, succ_host, succ_port = self.successor        
         request = {
             "cmd": "TRANSFER_KEYS",
-            "new_node_id": self.node_id
+            "new_node_id": new_node_id,
+            "next_node_id": next_node_id
         }
         resp = self._send(succ_host, succ_port, request)
-        print("RESPONSE from TRANSFER_KEYS:", resp)
+        logging.info(f"RESPONSE from TRANSFER_KEYS: {resp}")
 
         keys_to_move = resp.get("keys", {})
-        print(f"[Node {self.node_id}] Acquiring keys from {succ_id}: {keys_to_move}")
+        logging.info(f"[Node {self.node_id}] Acquiring keys from {succ_id}: {keys_to_move}")
 
         # Convert keys to integers and lists to sets (if needed):
-        for k_int_str, nested_dict in keys_to_move.items():
-            k_int = int(k_int_str)  # Convert "234" -> 234
-
+        for k_int, nested_dict in keys_to_move.items():
             # Convert any list inside nested_dict back to a set (if that’s desired)
             # For example: { "Like a Rolling Stone": ["127.0.0.1:5000"] } -> set(...)[Node 88] REPLICATE PUT Like a Rolling Stone -> 127.0.0.1:5000 to 119 with TTL 1                                       │[Node 119] Forward PUT Like a Rolling Stone -> 127.0.0.1:5000 to 29
-
-
             self.data_store[k_int] = nested_dict
 
 
@@ -384,16 +401,16 @@ class ChordNode:
 
         succ_id, succ_host, succ_port = self.successor
         
-        print(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id} with TTL {ttl}, {start_node_id}")
+        logging.info(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id} with TTL {ttl}, {start_node_id}")
         if succ_id == start_node_id or ttl <= 1:
-            print(f"[Node {self.node_id}] TTL {ttl} for {key} reached")
+            logging.info(f"[Node {self.node_id}] TTL {ttl} for {key} reached")
             return ret_value
         
         if ttl == 1:
-            print(f"[Node {self.node_id}] TTL {ttl} for {key} reached")
+            logging.info(f"[Node {self.node_id}] TTL {ttl} for {key} reached")
             return ret_value
         
-        print(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id}")
+        logging.info(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id}")
         ret = self._send(succ_host, succ_port, {
             "cmd": cmd,
             "key": key,
@@ -412,10 +429,8 @@ class ChordNode:
         # That was the first put, we need to replicate it
         # We need to update the successor node as well
         succ_id, succ_host, succ_port = self.successor
-        if succ_id == start_node_id:
-            return
 
-        print(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id} with TTL {self.replication_factor}, {start_node_id}")
+        logging.info(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id} without TTL, {start_node_id}")
         ret = self._send(succ_host, succ_port, {
             "cmd": cmd,
             "key": key,

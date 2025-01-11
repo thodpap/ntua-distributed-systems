@@ -5,3 +5,4 @@ chordify_clone/client/__pycache__/
 insert/
 queries/
 requests/
+*.log
