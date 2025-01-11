@@ -1,6 +1,7 @@
 import hashlib
 
 M = 8
+BUFF_SIZE = 1024
 
 def chord_hash(key: str) -> int:
     """

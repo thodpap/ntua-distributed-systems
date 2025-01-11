@@ -2,194 +2,39 @@ import socket
 import threading
 import json
 from typing import Optional
-from utils import chord_hash, M, in_interval, _serialize_for_json
+from utils import chord_hash, M, in_interval, _serialize_for_json, BUFF_SIZE
 import sys
 import signal
 import time
 
-BUFF_SIZE = 1024
-
 class ChordNode:
-    def __init__(self, host: str, port: int, bootstrap_host: Optional[str] = None, bootstrap_port: Optional[int] = None, replication_factor: int = 1):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        bootstrap_host: Optional[str] = None,
+        bootstrap_port: Optional[int] = None,
+        replication_factor: int = 1
+    ):
+        # Core state
         self.host = host
         self.port = port
+        self.node_id = chord_hash(f"{host}:{port}")
         self.replication_factor = replication_factor
 
-        # Each node has an ID in the range [0, 2^M)
-        self.node_id = chord_hash(f"{host}:{port}")
-
-        # Pointers
+        # Ring pointers
         self.successor = (self.node_id, self.host, self.port)
-        self.predecessor = None
+        self.predecessor = (self.node_id, self.host, self.port)
 
+        # Data store and tracking
         self.uploaded_songs = []
-        # Finger table
-        # self.finger_table = [(None, None)] * M
-        
-        # Local data store: {key_id -> {
-        #  key -> [values]
-        # }
         self.data_store = {}
 
-        # Start listening
-        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_sock.bind((self.host, self.port))
-        self.server_sock.listen(5)
-
-        print(f"[Node {self.node_id}] Listening on {self.host}:{self.port}...")
-
-        # If we have a bootstrap node, join the ring
+        # Possibly initialize ring if bootstrap is provided
         if bootstrap_host and bootstrap_port:
             self.join(bootstrap_host, bootstrap_port)
         else:
-            print("No bootstrap node provided, starting new ring.")
-            self.successor = (self.node_id, self.host, self.port)
-            self.predecessor = (self.node_id, self.host, self.port)
-
-        # Start accepting connections
-        t_accept = threading.Thread(target=self.accept_connections, daemon=True)
-        t_accept.start()
-
-
-    def accept_connections(self):
-        while True:
-            try:
-                client_sock, addr = self.server_sock.accept()
-                t = threading.Thread(target=self.handle_connection, args=(client_sock, addr))
-                t.daemon = True
-                t.start()
-            except Exception as e:
-                print(f"Error accepting connection: {e}")
-
-                
-    def handle_connection(self, client_sock, addr):
-        """
-        Handle incoming messages (commands) from other nodes or a client.
-        """
-        try:
-            data = client_sock.recv(BUFF_SIZE).decode('utf-8')
-            if not data:
-                client_sock.close()
-                return
-            try:
-                request = json.loads(data)
-            except json.JSONDecodeError:
-                client_sock.close()
-                return
-
-            cmd = request.get("cmd")
-            response = {}
-
-            if cmd == "GET_NODE_INFO":
-                response["node_id"] = self.node_id
-                response["successor"] = self.successor
-                response["predecessor"] = self.predecessor
-                print("DATA STORE", self.data_store)
-                # response["finger_table"] = self.finger_table
-
-            elif cmd == "FIND_SUCCESSOR":
-                key_id = request["key_id"]
-                successor_info, predecessor_info = self.find_successor(key_id)
-                response["successor"] = successor_info
-                response["predecessor"] = predecessor_info
-
-            elif cmd == "NOTIFY":
-                # Another node calls 'notify' on us, claiming it might be our predecessor
-                candidate = request["candidate"]
-                self.notify(candidate)
-                response["status"] = "OK"
-
-            elif cmd == "PUT":
-                key = request["key"]
-                value = request["value"]
-                start_node_id = request.get("start_node_id", self.node_id)
-                ttl = request.get("ttl", None)
-                self.chord_put(key, value, start_node_id, ttl)
-                response["status"] = "OK"
-
-            elif cmd == "GET":
-                key = request["key"]
-                if key == "*":
-                    # Get all keys
-                    start_node_id = request.get("start_node_id", self.node_id)
-                    result = self.chord_get_all(start_node_id)
-                else:
-                    result, id = self.chord_get(key)
-                    response["id"] = id
-                
-                response["value"] = result
-
-            elif cmd == "DELETE":
-                key = request.get("key", None)
-                value = request.get("value", None)
-                if not key or not value:
-                    response["status"] = "WRONG_PARAMS"
-                else:
-                    response["status"] = self.chord_delete(key, value)
-
-            elif cmd == "JOIN":
-                new_node_host = request["host"]
-                new_node_port = request["port"]
-                print(f"[Node {self.node_id}] New node wants to join via {new_node_host}:{new_node_port}")
-                succ, pred = self.chord_join(new_node_host, new_node_port)
-                response["successor"] = succ
-                response["predecessor"] = pred
-
-            elif cmd == "DEPART":
-                self.depart()
-                response["status"] = "departing"
-
-            elif cmd == "UPDATE_SUCCESSOR":
-                print(f"[Node {self.node_id}] Updating successor to {request['new_succ_id']}, {request}")
-                self._update_successor((request["new_succ_id"],
-                                        request["new_succ_host"],
-                                        request["new_succ_port"]))
-                response["status"] = "OK"
-
-            elif cmd == "UPDATE_PREDECESSOR":
-                print(f"[Node {self.node_id}] Updating predecessor to {request['new_pred_id']}, {request}")
-                self._update_predecessor((request["new_pred_id"],
-                                        request["new_pred_host"],
-                                        request["new_pred_port"]))
-                response["status"] = "OK"
-
-            elif cmd == "TRANSFER_KEYS":
-                new_node_id = request["new_node_id"]
-                keys_to_give = self._find_keys_for_node(new_node_id)
-                response["keys"] = _serialize_for_json(keys_to_give)
-                print(f"[Node {self.node_id}] Transferring keys to {new_node_id}: {response["keys"]}")
-                
-                # Remove them from local store
-                for k_str in keys_to_give.keys():
-                    k_int = int(k_str)
-                    self.data_store.pop(k_int, None)
-            
-            elif cmd == "GET_OVERLAY":
-                if "start_node_id" not in request:
-                    start_node_id = self.node_id
-                else:
-                    start_node_id = request["start_node_id"]
-                
-                response["overlay"] = self.chord_overlay(start_node_id)
-                
-            elif cmd == 'DEPART': 
-                response["status"] = "departing"
-                client_sock.sendall(json.dumps(response).encode('utf-8'))
-                client_sock.close()
-                self.depart()
-                return
-                
-            else:
-                response["error"] = "Unknown command"
-            
-            r_data = json.dumps(response).encode('utf-8')
-            client_sock.sendall(r_data)
-        except Exception as e:
-            print(e)
-            client_sock.sendall(b"ERROR")
-        finally:
-            client_sock.close()
+            print("[ChordNode] No bootstrap node provided, creating a new ring.")
 
     def join(self, bootstrap_host: str, bootstrap_port: int):
         """Join the ring via a known bootstrap node."""
@@ -272,10 +117,6 @@ class ChordNode:
                     "value": list(itm_value)
                 })
         self.data_store.clear()
-
-        print(f"[Node {self.node_id}] Closing socket and shutting down.")
-        self.server_sock.close()
-        sys.exit(0)
 
 
     def find_successor(self, key_id: int):
@@ -555,39 +396,3 @@ class ChordNode:
         else:
             self.data_store[key_id][key].add(value)
 
-def run_node(host, port, bootstrap_host=None, bootstrap_port=None, replication_factor=1):
-    """
-    Simple wrapper to instantiate ChordNode and keep it running.
-    """
-    node = ChordNode(host, port, bootstrap_host, bootstrap_port, replication_factor)
-
-    def signal_handler(sig, frame):
-        print('Shutting down node...')
-        node.depart()
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, signal_handler)
-
-    # Block main thread to keep the node alive
-    while True:
-        time.sleep(1)
-
-
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=5000)
-    parser.add_argument("--bootstrap_host", type=str, default=None)
-    parser.add_argument("--bootstrap_port", type=int, default=None)
-    parser.add_argument("--replication_factor", type=int, default=3)
-    
-    args = parser.parse_args()
-
-    run_node(
-        host=args.host,
-        port=args.port,
-        bootstrap_host=args.bootstrap_host,
-        bootstrap_port=args.bootstrap_port,
-        replication_factor=args.replication_factor
-    )
