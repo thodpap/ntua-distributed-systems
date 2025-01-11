@@ -6,6 +6,7 @@ import json
 from chord_node_simple import ChordNode
 from utils import BUFF_SIZE, _serialize_for_json
 import sys
+import logging
 
 class ChordServer:
     def __init__(self, chord_node: ChordNode):
@@ -152,7 +153,12 @@ class ChordServer:
         elif cmd == "TRANSFER_KEYS":
             new_node_id = request["new_node_id"]
             next_node_id = request.get("next_node_id", None)
-            serialize_data = self.node.chord_transfer_keys(new_node_id, next_node_id)
+            ttl = request.get("ttl", None)
+            logging.info(f"[Node {self.node.node_id}] TTL TRANSFER_KEYS {ttl}")
+            if ttl == 0:
+                return {"keys": []}
+            
+            serialize_data = self.node.chord_transfer_keys(new_node_id, next_node_id, ttl)
             
             return {"keys": serialize_data}
         

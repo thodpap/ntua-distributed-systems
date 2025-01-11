@@ -65,7 +65,7 @@ class ChordNode:
             })
             logging.info(f"[Node {self.node_id}] Notified successor {self.successor} of new predecessor status: {status}")
             # self.fix_fingers()
-            self._acquire_keys(self.node_id, self.node_id)
+            self._acquire_keys(self.node_id, self.node_id, self.replication_factor+1 if self.replication_factor else self.replication_factor)
         else:
             # fallback
             self.successor = (self.node_id, self.host, self.port)
@@ -278,7 +278,7 @@ class ChordNode:
         overlay.extend(resp.get("overlay", []))
         return overlay
 
-    def chord_transfer_keys(self, next_node_id, new_node_id):
+    def chord_transfer_keys(self, next_node_id, new_node_id, ttl=None):
         """
         Transfer keys that belong to new_node_id to the new node.
         """
@@ -288,13 +288,13 @@ class ChordNode:
         
         # Remove them from local store
         logging.info(f"DELETING ? {new_node_id} != {self.node_id}")
-        if new_node_id != self.node_id:
+        if new_node_id != self.node_id and ttl != 1:
             for k_int in keys_to_give.keys():
                 self.data_store.pop(k_int)
             
         logging.info(f"[Node {self.node_id}] Transferring keys to {new_node_id}: {serialize_data}")
         
-        self._acquire_keys(new_node_id, self.node_id)
+        self._chain_replicate_acquire_keys(new_node_id, new_node_id, ttl)
         return serialize_data
         
     def _send(self, host, port, message_dict):
@@ -317,7 +317,7 @@ class ChordNode:
     def _update_predecessor(self, new_predecessor):
         self.predecessor = tuple(new_predecessor)
 
-    def _acquire_keys(self, new_node_id: int = None, next_node_id: int = None):
+    def _acquire_keys(self, new_node_id: int = None, next_node_id: int = None, ttl: int = None):
         """
         If you wanted to explicitly fetch keys from your successor.
         Expects the successor to return something like:
@@ -329,12 +329,19 @@ class ChordNode:
                 }
             }
         """
+        if ttl == 0:
+            logging.debug("REACHED THE END OF TTL ACQUIRE KEYS")
+            return 
+        
         succ_id, succ_host, succ_port = self.successor        
         request = {
             "cmd": "TRANSFER_KEYS",
             "new_node_id": new_node_id,
-            "next_node_id": next_node_id
+            "next_node_id": next_node_id,
         }
+        if ttl:
+            request["ttl"] = ttl - 1
+            
         resp = self._send(succ_host, succ_port, request)
         logging.info(f"RESPONSE from TRANSFER_KEYS: {resp}")
 
@@ -440,3 +447,10 @@ class ChordNode:
         })
         if "value" in ret and "id" in ret: return ret["value"], ret["id"] # GET SPECIFIC
         return ret
+    
+    def _chain_replicate_acquire_keys(self, new_node_id, next_node_id, ttl):
+        if not self.replication_factor:
+            # If replication factor is None or it's zero we are done.
+            return
+        
+        self._acquire_keys(new_node_id, self.node_id, ttl)
