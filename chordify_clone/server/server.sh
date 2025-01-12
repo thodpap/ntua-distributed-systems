@@ -22,7 +22,7 @@ python main.py \
   --replication-factor "$REPLICATION_FACTOR" \
   --replication-consistency "$CONSISTENCY" \
   &> "logs/5000_${CONSISTENCY}_${REPLICATION_FACTOR}.log" &
-echo "Server 0 on port 5000 started..."
+# echo "Server 0 on port 5000 started..."
 sleep 2  # Give the first server time to stabilize
 
 # Start servers 1..9, bootstrap to first server
@@ -36,7 +36,7 @@ for i in {1..9}; do
     --replication-consistency "$CONSISTENCY"  \
     &> "logs/${port}_${CONSISTENCY}_${REPLICATION_FACTOR}.log" &
 
-  echo "Server $i on port $port started..."
+#   echo "Server $i on port $port started..."
   sleep 1
 done
 

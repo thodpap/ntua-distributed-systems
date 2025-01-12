@@ -12,11 +12,18 @@ for rf in "${replication_factors[@]}"; do
     echo "Starting servers with k=$rf consistency=$c ..."
     pushd ../server/
     ./server.sh "$rf" "$c"
-    sleep 5
+    sleep 2
     popd
-    
+
     echo "Running insertion experiment..."
     ./run_inserts.sh
+    
+    sleep 1
+    
+    echo "Running query experiment..."
+    ./run_queries.sh
+
+    sleep 1
     
     echo "Killing all servers..."
     pkill -f "python main.py"
