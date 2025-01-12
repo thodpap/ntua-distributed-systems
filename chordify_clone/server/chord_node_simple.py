@@ -107,21 +107,21 @@ class ChordNode:
                 "new_pred_port": pred_port
             })
         # Transfer data to successor
-        if self.replication_factor is None or self.replication_factor == 1:
-            for key_id, value in self.data_store.items():
-                for key, itm_value in value.items():
-                    ret = self._send(succ_host, succ_port, {
-                        "cmd": "PUT",
-                        "key": key,
-                        "value": list(itm_value)
-                    })
-        else:
-            resp = self._send(succ_host, succ_port, {
-                "cmd": "MOVE_ALL_KEYS",
-                "ttl": self.replication_factor,
-                "data_store": _serialize_for_json(self.data_store)
-            })
-            logging.info(f"RESPONSE from MOVE_ALL_KEYS: {resp}")
+        # if self.replication_factor is None or self.replication_factor == 1:
+        #     for key_id, value in self.data_store.items():
+        #         for key, itm_value in value.items():
+        #             ret = self._send(succ_host, succ_port, {
+        #                 "cmd": "PUT",
+        #                 "key": key,
+        #                 "value": list(itm_value)
+        #             })
+        # else:
+        resp = self._send(succ_host, succ_port, {
+            "cmd": "MOVE_ALL_KEYS",
+            "ttl": self.replication_factor if self.replication_factor else 1,
+            "data_store": _serialize_for_json(self.data_store)
+        })
+        logging.info(f"RESPONSE from MOVE_ALL_KEYS: {resp}")
         self.data_store.clear()
 
 
