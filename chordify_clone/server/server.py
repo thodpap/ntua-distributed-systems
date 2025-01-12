@@ -70,12 +70,20 @@ class ChordServer:
             response = self._dispatch(request)
             
             r_data = json.dumps(response).encode("utf-8")
-            client_sock.sendall(r_data)
             
             if "status" in request and request["status"] == "departing":
                 self.node.depart()
                 print(f"[Node {self.node.node_id}] Closing socket and shutting down.")
                 self.shutdown()
+            
+            data_length = len(r_data)
+            client_sock.sendall(data_length.to_bytes(8, byteorder='big'))
+
+            bytes_sent = 0
+            while bytes_sent < data_length:
+                chunk = r_data[bytes_sent : bytes_sent + BUFF_SIZE]
+                client_sock.sendall(chunk)
+                bytes_sent += len(chunk)
         except Exception as e:
             print("[ChordServer] Exception while handling connection:", e)
             client_sock.sendall(b"ERROR")
