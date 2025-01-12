@@ -45,7 +45,22 @@ class ChordServer:
         Parse the request and forward to the chord_node for processing.
         """
         try:
-            data = client_sock.recv(BUFF_SIZE).decode("utf-8")
+            # Read length prefix (8 bytes)
+            length_bytes = client_sock.recv(8)
+            if not length_bytes:
+                client_sock.close()
+                return
+
+            data_length = int.from_bytes(length_bytes, byteorder='big')
+
+            # Read the entire message data in chunks
+            data = b''
+            while len(data) < data_length:
+                chunk = client_sock.recv(BUFF_SIZE)
+                if not chunk:
+                    break
+                data += chunk
+
             if not data:
                 client_sock.close()
                 return

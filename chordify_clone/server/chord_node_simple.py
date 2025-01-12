@@ -324,14 +324,44 @@ class ChordNode:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((host, port))
-            s.sendall(json.dumps(message_dict).encode('utf-8'))
-            resp_data = s.recv(BUFF_SIZE)
-            s.close()
-            if resp_data:
-                return json.loads(resp_data.decode('utf-8'))
-            else:
+
+            # 1) Convert message_dict to bytes
+            data_bytes = json.dumps(message_dict).encode('utf-8')
+
+            # 2) Send the length of the data (8 bytes, big-endian)
+            data_length = len(data_bytes)
+            s.sendall(data_length.to_bytes(8, byteorder='big'))
+
+            # 3) Send the data in chunks
+            bytes_sent = 0
+            while bytes_sent < data_length:
+                chunk = data_bytes[bytes_sent : bytes_sent + BUFF_SIZE]
+                s.sendall(chunk)
+                bytes_sent += len(chunk)
+
+            # 4) Read the length of the response (8 bytes)
+            response_length_bytes = s.recv(8)
+            if not response_length_bytes:
+                s.close()
                 return {}
-        except:
+
+            response_length = int.from_bytes(response_length_bytes, byteorder='big')
+
+            # Read the entire response
+            response_data = b''
+            while len(response_data) < response_length:
+                chunk = s.recv(BUFF_SIZE)
+                if not chunk:
+                    break
+                response_data += chunk
+
+            s.close()
+
+            # 5) Deserialize the response and return
+            return json.loads(response_data.decode('utf-8'))
+
+        except Exception as e:
+            print(f"[_send] Exception: {e}")
             return {}
 
     def _update_successor(self, new_successor):
