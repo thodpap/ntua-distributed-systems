@@ -21,7 +21,6 @@ def send_request(host, port, message_dict):
         bytes_sent = 0
         while bytes_sent < data_length:
             chunk = data_bytes[bytes_sent : bytes_sent + BUFF_SIZE]
-            print(chunk)
             s.sendall(chunk)
             bytes_sent += len(chunk)
 
@@ -56,6 +55,7 @@ def main():
     parser.add_argument("value", type=str, nargs="?", help="Value (for insert)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Node host")
     parser.add_argument("--port", type=int, default=5000, help="Node port")
+    parser.add_argument("--remove-output", dest="remove_output", type=bool, default=True, help="Remove output (for speadup)")
 
     args = parser.parse_args()
     
@@ -73,8 +73,9 @@ def main():
             "value": args.value
         }
         response = send_request(args.host, args.port, request)
-        pprint(f"PUT response:")
-        pprint(response)
+        if not args.remove_output:
+            pprint(f"PUT response:")
+            pprint(response)
 
     elif cmd == "QUERY":
         if not args.key_or_value:
@@ -85,16 +86,18 @@ def main():
             "key": args.key_or_value
         }
         response = send_request(args.host, args.port, request)
-        print(f"GET response:")
-        pprint(response)
+        if not args.remove_output:
+            print(f"GET response:")
+            pprint(response)
     elif cmd == "INFO":
         # Show node info: ID, predecessor, successor, finger table
         request = {
             "cmd": "GET_NODE_INFO"
         }
         response = send_request(args.host, args.port, request)
-        pprint(f"INFO response:")
-        pprint(response)
+        if not args.remove_output:
+            pprint(f"INFO response:")
+            pprint(response)
     elif cmd == "DELETE":
         if not args.key_or_value:
             pprint(f"Usage: cli.py DELETE <key> [--host] [--port]")
@@ -105,22 +108,25 @@ def main():
             "value": args.value
         }
         response = send_request(args.host, args.port, request)
-        pprint(f"DELETE response:")
-        pprint(response)
+        if not args.remove_output:
+            pprint(f"DELETE response:")
+            pprint(response)
     elif cmd == "OVERLAY":
         request = {
             "cmd": "GET_OVERLAY"
         }
         response = send_request(args.host, args.port, request)
-        pprint(f"OVERLAY response:")
-        pprint(response)
+        if not args.remove_output:
+            pprint(f"OVERLAY response:")
+            pprint(response)
     elif cmd == "DEPART":
         request = {
             "cmd": "DEPART"
         }
         response = send_request(args.host, args.port, request)
-        pprint(f"DEPART response:")
-        pprint(response)
+        if not args.remove_output:
+            pprint(f"DEPART response:")
+            pprint(response)
     elif cmd == "HELP":
         pprint("Commands:")
         pprint("  insert <key> <value> [--host <host>] [--port <port>]")
