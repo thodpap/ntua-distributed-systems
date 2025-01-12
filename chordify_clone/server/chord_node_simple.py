@@ -15,14 +15,16 @@ class ChordNode:
         port: int,
         bootstrap_host: Optional[str] = None,
         bootstrap_port: Optional[int] = None,
-        replication_factor: int = 1 # No replication at all
+        replication_factor: int = 1, # No replication at all,
+        replication_consistency: Optional[int] = None
     ):
         # Core state
         self.host = host
         self.port = port
         self.node_id = chord_hash(f"{host}:{port}")
         self.replication_factor = replication_factor
-
+        self.replication_consistency = replication_consistency
+        
         # Ring pointers
         self.successor = (self.node_id, self.host, self.port)
         self.predecessor = (self.node_id, self.host, self.port)
