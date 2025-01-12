@@ -84,14 +84,13 @@ class ChordNode:
         """
         ret = [self.chord_delete(song, f"{self.host}:{self.port}", self.node_id, self.replication_factor - 1 if self.replication_factor else self.replication_factor) for song in self.uploaded_songs]
         logging.info(f"Deleted songs' status: {list(zip(self.uploaded_songs, ret))}")
-        
-        logging.info(f"[Node {self.node_id}] Departing the ring...")
+
+        # 3) Notify predecessor & successor to link each other
         succ_id, succ_host, succ_port = self.successor
         pred_id, pred_host, pred_port = self.predecessor if self.predecessor else (None, None, None)
 
-        # Notify predecessor & successor to link each other
         if pred_id is not None and (pred_id != self.node_id):
-            logging.info(f"Notifying predecessor {pred_id} for its new successor: {succ_id}")
+            logging.info(f"[Node {self.node_id}] Notifying predecessor {pred_id} to link successor {succ_id}")
             self._send(pred_host, pred_port, {
                 "cmd": "UPDATE_SUCCESSOR",
                 "new_succ_id": succ_id,
@@ -100,7 +99,7 @@ class ChordNode:
             })
 
         if succ_id != self.node_id:
-            logging.info(f"Notifying successor {succ_id} for its new predecessor: {pred_id}")
+            logging.info(f"[Node {self.node_id}] Notifying successor {succ_id} to link predecessor {pred_id}")
             self._send(succ_host, succ_port, {
                 "cmd": "UPDATE_PREDECESSOR",
                 "new_pred_id": pred_id,
@@ -108,13 +107,21 @@ class ChordNode:
                 "new_pred_port": pred_port
             })
         # Transfer data to successor
-        for key_id, value in self.data_store.items():
-            for key, itm_value in value.items():
-                ret = self._send(succ_host, succ_port, {
-                    "cmd": "PUT",
-                    "key": key,
-                    "value": list(itm_value)
-                })
+        if self.replication_factor is None or self.replication_factor == 1:
+            for key_id, value in self.data_store.items():
+                for key, itm_value in value.items():
+                    ret = self._send(succ_host, succ_port, {
+                        "cmd": "PUT",
+                        "key": key,
+                        "value": list(itm_value)
+                    })
+        else:
+            resp = self._send(succ_host, succ_port, {
+                "cmd": "MOVE_ALL_KEYS",
+                "ttl": self.replication_factor,
+                "data_store": _serialize_for_json(self.data_store)
+            })
+            logging.info(f"RESPONSE from MOVE_ALL_KEYS: {resp}")
         self.data_store.clear()
 
 
@@ -296,7 +303,23 @@ class ChordNode:
         
         self._chain_replicate_acquire_keys(new_node_id, new_node_id, ttl)
         return serialize_data
-        
+
+    def chord_move_all_keys(self, data_store, ttl):
+        # Step 1: Get data from predecessor
+        if ttl is not None and ttl > 1:
+            succ_id, succ_host, succ_port = self.successor
+            resp = self._send(succ_host, succ_port, {
+                "cmd": "MOVE_ALL_KEYS",
+                "ttl": ttl - 1,
+                "data_store": _serialize_for_json(self.data_store)
+            })
+            print(f"RESPONSE from MOVE_ALL_KEYS: {resp}")
+            
+        # We merge our data_store based on the data_store variable
+        for k_int, kv_dict in data_store.items():
+            for k, v in kv_dict.items():
+                self._store_new_value(int(k_int), k, v)
+    
     def _send(self, host, port, message_dict):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -360,7 +383,7 @@ class ChordNode:
         dispatch_data = {}
         for k_int, kv_dict in self.data_store.items():
             # If k_int is in (self.node_id, new_node_id)
-            if in_interval(k_int, self.node_id, new_node_id):
+            if in_interval(int(k_int), self.node_id, new_node_id):
                 dispatch_data[k_int] = kv_dict
         return dispatch_data
 
@@ -369,7 +392,8 @@ class ChordNode:
             self.data_store[key_id] = {}
         if key not in self.data_store[key_id]:
             self.data_store[key_id][key] = set()
-        if isinstance(value, list):
+            
+        if isinstance(value, set):
             self.data_store[key_id][key].update(value)
         else:
             self.data_store[key_id][key].add(value)

@@ -4,7 +4,7 @@ import socket
 import threading
 import json
 from chord_node_simple import ChordNode
-from utils import BUFF_SIZE, _serialize_for_json
+from utils import BUFF_SIZE, _serialize_for_json, _deserialize_from_json
 import sys
 import logging
 
@@ -78,7 +78,8 @@ class ChordServer:
             return {
                 "node_id": self.node.node_id,
                 "successor": self.node.successor,
-                "predecessor": self.node.predecessor
+                "predecessor": self.node.predecessor,
+                "data_store": _serialize_for_json(self.node.data_store),
             }
         elif cmd == "FIND_SUCCESSOR":
             key_id = request["key_id"]
@@ -157,10 +158,15 @@ class ChordServer:
             logging.info(f"[Node {self.node.node_id}] TTL TRANSFER_KEYS {ttl}")
             if ttl == 0:
                 return {"keys": []}
-            
             serialize_data = self.node.chord_transfer_keys(new_node_id, next_node_id, ttl)
-            
             return {"keys": serialize_data}
+        
+        elif cmd == "MOVE_ALL_KEYS":
+            # Our custom chain departure backward step:
+            ttl = request.get("ttl", None)
+            data_store = _deserialize_from_json(request.get("data_store", None))
+            self.node.chord_move_all_keys(data_store, ttl)
+            return {"status": "OK"}
         
         elif cmd == "GET_OVERLAY":
             if "start_node_id" not in request:
