@@ -31,7 +31,7 @@ class ChordNode:
 
         # Data store and tracking
         self.uploaded_songs = []
-        self.data_store = {}
+        self.data_store = dict()
 
         # Possibly initialize ring if bootstrap is provided
         if bootstrap_host and bootstrap_port:
@@ -189,7 +189,7 @@ class ChordNode:
         if node_id == self.node_id:
             # We reached the primary node for the key_id
             self._store_new_value(key_id, key, value)
-            self._chain_replicate_without_ttl(start_node_id, key, value, "PUT")
+            self._chain_replicate_without_ttl(self.node_id, key, value, "PUT")
             logging.info(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
             return
             
@@ -214,7 +214,7 @@ class ChordNode:
                 return self._read_value(key_id, key)
             if self.replication_factor == 1:
                 return self._read_value(key_id, key)
-            return self._chain_replicate_without_ttl(start_node_id, key, None, "GET")        
+            return self._chain_replicate_without_ttl(self.node_id, key, None, "GET")        
         else:
             logging.info(f"[Node {self.node_id}] Forward GET {key} to {node_id}")
             resp = self._send(node_host, node_port, {
@@ -247,7 +247,7 @@ class ChordNode:
         (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if node_id == self.node_id:
             self._delete_value(key_id, key, value)
-            self._chain_replicate_without_ttl(start_node_id, key, value, "DELETE")
+            self._chain_replicate_without_ttl(self.node_id, key, value, "DELETE")
             return "OK"
         
         resp = self._send(node_host, node_port, {
@@ -269,7 +269,7 @@ class ChordNode:
                 "successor": self.successor,
                 "predecessor": self.predecessor,
                 "data_store": _serialize_for_json(self.data_store),
-                "uploaded_songs": self.uploaded_songs
+                "uploaded_songs": _serialize_for_json(self.uploaded_songs)
             }
         ]
 
@@ -306,9 +306,9 @@ class ChordNode:
         self._chain_replicate_acquire_keys(new_node_id, new_node_id, ttl)
         return serialize_data
 
-    def chord_move_all_keys(self, data_store, ttl):
+    def chord_move_all_keys(self, data_store, ttl=1):
         # Step 1: Get data from predecessor
-        if ttl is not None and ttl > 1:
+        if ttl > 1:
             succ_id, succ_host, succ_port = self.successor
             resp = self._send(succ_host, succ_port, {
                 "cmd": "MOVE_ALL_KEYS",
@@ -363,7 +363,7 @@ class ChordNode:
             return json.loads(response_data.decode('utf-8'))
 
         except Exception as e:
-            print(f"[_send] Exception: {e}")
+            logging.error(f"[_send] Exception: {e}")
             return {}
 
     def _update_successor(self, new_successor):
@@ -396,7 +396,8 @@ class ChordNode:
         }
         if ttl:
             request["ttl"] = ttl - 1
-            
+        
+        logging.info(f"[Node {self.node_id}] Requesting keys from {succ_id} with TTL {ttl}")
         resp = self._send(succ_host, succ_port, request)
         logging.info(f"RESPONSE from TRANSFER_KEYS: {resp}")
 
@@ -407,7 +408,7 @@ class ChordNode:
         for k_int, nested_dict in keys_to_move.items():
             # Convert any list inside nested_dict back to a set (if that’s desired)
             # For example: { "Like a Rolling Stone": ["127.0.0.1:5000"] } -> set(...)[Node 88] REPLICATE PUT Like a Rolling Stone -> 127.0.0.1:5000 to 119 with TTL 1                                       │[Node 119] Forward PUT Like a Rolling Stone -> 127.0.0.1:5000 to 29
-            self.data_store[k_int] = nested_dict
+            self.data_store[int(k_int)] = nested_dict
 
 
     def _find_keys_for_node(self, new_node_id: int) -> dict:
@@ -421,12 +422,21 @@ class ChordNode:
 
     def _store_new_value(self, key_id, key, value):
         if key_id not in self.data_store:
-            self.data_store[key_id] = {}
+            self.data_store[key_id] = dict()
         if key not in self.data_store[key_id]:
             self.data_store[key_id][key] = set()
+        
+        if not isinstance(self.data_store[key_id][key], set):
+            if isinstance(self.data_store[key_id][key], list):
+                # Convert the list to a set of its elements
+                self.data_store[key_id][key] = set(self.data_store[key_id][key])
+            else:
+                # Wrap the single value in a set
+                self.data_store[key_id][key] = {self.data_store[key_id][key]}
+
             
         if isinstance(value, set):
-            self.data_store[key_id][key].update(value)
+            self.data_store[key_id][key].update(set(value))
         else:
             self.data_store[key_id][key].add(value)
 

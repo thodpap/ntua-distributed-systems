@@ -41,19 +41,19 @@ class ChordServer:
                 print(f"[ChordServer] Error accepting connection: {e}")
 
     def _handle_connection(self, client_sock, addr):
-        """
-        Parse the request and forward to the chord_node for processing.
-        """
         try:
-            # Read length prefix (8 bytes)
+            logging.info(f"[ChordServer] Connection from {addr} {client_sock}")
+            
+            # 1) Read the request length prefix
             length_bytes = client_sock.recv(8)
             if not length_bytes:
-                client_sock.close()
+                logging.info("[ChordServer] No size received. Closing connection.")
                 return
 
             data_length = int.from_bytes(length_bytes, byteorder='big')
+            # logging.info(f"[ChordServer] Receiving data of length {data_length}")
 
-            # Read the entire message data in chunks
+            # 2) Read the entire request data
             data = b''
             while len(data) < data_length:
                 chunk = client_sock.recv(BUFF_SIZE)
@@ -62,21 +62,31 @@ class ChordServer:
                 data += chunk
 
             if not data:
-                client_sock.close()
+                logging.info("[ChordServer] No data received. Closing connection.")
                 return
 
+            # logging.info(f"[ChordServer] Received data: {data}")
             request = json.loads(data)
-            # Decide which method on self.node to call
+
+            # 3) Dispatch the request
+            logging.info(f"[ChordServer] Dispatching request: {request}")
             response = self._dispatch(request)
-            
+            logging.info(f"[ChordServer] Response: {response}")
+
+            # 4) Prepare response data
             r_data = json.dumps(response).encode("utf-8")
-            
+
+            # 5) If departing, do something special (just be sure to follow the protocol)
             if "status" in request and request["status"] == "departing":
                 self.node.depart()
                 print(f"[Node {self.node.node_id}] Closing socket and shutting down.")
+                # Possibly still send a final response to follow the protocol?
+                # Then shutdown:
                 self.shutdown()
-            
+
+            # 6) Send response length + data
             data_length = len(r_data)
+            # logging.info(f"[ChordServer] Sending response of length {data_length}")
             client_sock.sendall(data_length.to_bytes(8, byteorder='big'))
 
             bytes_sent = 0
@@ -84,12 +94,18 @@ class ChordServer:
                 chunk = r_data[bytes_sent : bytes_sent + BUFF_SIZE]
                 client_sock.sendall(chunk)
                 bytes_sent += len(chunk)
+
         except Exception as e:
             print("[ChordServer] Exception while handling connection:", e)
-            client_sock.sendall(b"ERROR")
+            
+            # Always send length prefix + error data
+            error_msg = b"ERROR"
+            client_sock.sendall(len(error_msg).to_bytes(8, byteorder='big'))
+            client_sock.sendall(error_msg)
 
         finally:
             client_sock.close()
+
 
     def _dispatch(self, request):
         """
@@ -122,6 +138,7 @@ class ChordServer:
             value = request["value"]
             start_node_id = request.get("start_node_id", self.node.node_id)
             ttl = request.get("ttl", None)
+            logging.error(f"HERE {key}, {value}, {start_node_id}, {ttl}")
             self.node.chord_put(key, value, start_node_id, ttl)
             return {"status": "OK"}
 
@@ -186,8 +203,9 @@ class ChordServer:
         
         elif cmd == "MOVE_ALL_KEYS":
             # Our custom chain departure backward step:
-            ttl = request.get("ttl", None)
+            ttl = request.get("ttl", 1)
             data_store = _deserialize_from_json(request.get("data_store", None))
+            logging.info(f"data store: {data_store}")
             self.node.chord_move_all_keys(data_store, ttl)
             return {"status": "OK"}
         
@@ -198,9 +216,6 @@ class ChordServer:
                 start_node_id = request["start_node_id"]
             
             return {"overlay": self.node.chord_overlay(start_node_id)}
-            
-        elif cmd == 'DEPART': 
-            return {"status": "departing"}
             
         else:
             return {"error": f"Unknown command '{cmd}'"}
