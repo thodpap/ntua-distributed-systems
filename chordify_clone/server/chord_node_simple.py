@@ -550,16 +550,21 @@ class ChordNode:
             logging.info(f"[Node {self.node_id}] TTL {ttl} for {key} reached")
             return ret_value
         
-        logging.info(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id}")
-        ret = self._send(succ_host, succ_port, {
+        chain_data = {
             "cmd": cmd,
             "key": key,
             "value": value,
             "start_node_id": start_node_id,
             "ttl": ttl - 1
-        })
-        if "value" in ret and "id" in ret: return ret["value"], ret["id"] # GET SPECIFIC
-        return ret
+        }
+        if self.replication_consistency == "e":
+            self._send_async(succ_host, succ_port, chain_data)
+            return True
+        else:
+            logging.info(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id}")
+            ret = self._send(succ_host, succ_port, chain_data)
+            if "value" in ret and "id" in ret: return ret["value"], ret["id"] # GET SPECIFIC
+            return ret
     
     def _chain_replicate_without_ttl(self, start_node_id, key, value, cmd):
         if not self.replication_factor:

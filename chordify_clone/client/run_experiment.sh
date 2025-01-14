@@ -4,7 +4,7 @@
 # This will run the insertion experiment for (k=1,3,5) x (l,e).
 
 replication_factors=(1 3 5)
-consistencies=("l") # ("l" "e")
+consistencies=("l" "e")
 
 for rf in "${replication_factors[@]}"; do
   for c in "${consistencies[@]}"; do
