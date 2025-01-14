@@ -25,6 +25,8 @@ class ChordNode:
         self.replication_factor = replication_factor
         self.replication_consistency = replication_consistency
         
+        assert self.replication_consistency in [None, "l", "e"], "Invalid replication consistency"
+        
         # Ring pointers
         self.successor = (self.node_id, self.host, self.port)
         self.predecessor = (self.node_id, self.host, self.port)
@@ -51,22 +53,32 @@ class ChordNode:
             self.successor = tuple(successor_info["successor"])
             self.predecessor = tuple(successor_info["predecessor"])
             
-            # Notify predecessor and notify successor
-            status = self._send(self.predecessor[1], self.predecessor[2], {
+            # If eventual consistency, we can asynchronously notify predecessor & successor
+            update_succ_msg = {
                 "cmd": "UPDATE_SUCCESSOR",
                 "new_succ_id": self.node_id,
                 "new_succ_host": self.host,
                 "new_succ_port": self.port
-            })
-            logging.info(f"[Node {self.node_id}] Notified predecessor {self.predecessor} of new successor status: {status}")
-            status = self._send(self.successor[1], self.successor[2], {
+            }
+            update_pred_msg = {
                 "cmd": "UPDATE_PREDECESSOR",
                 "new_pred_id": self.node_id,
                 "new_pred_host": self.host,
                 "new_pred_port": self.port
-            })
-            logging.info(f"[Node {self.node_id}] Notified successor {self.successor} of new predecessor status: {status}")
-            # self.fix_fingers()
+            }
+            # Notify predecessor and notify successor
+            if self.replication_consistency == "e":
+                # asynchronous updates
+                self._send_async(self.predecessor[1], self.predecessor[2], update_succ_msg)
+                self._send_async(self.successor[1], self.successor[2], update_pred_msg)
+            else:
+                print(f"[Node {self.node_id}] Notifying predecessor {self.predecessor}")
+                # linearizable => synchronous
+                status = self._send(self.predecessor[1], self.predecessor[2], update_succ_msg)
+                logging.info(f"[Node {self.node_id}] Notified predecessor {self.predecessor} => {status}")
+                status = self._send(self.successor[1], self.successor[2], update_pred_msg)
+                logging.info(f"[Node {self.node_id}] Notified successor {self.successor} => {status}")
+
             self._acquire_keys(self.node_id, self.node_id, self.replication_factor+1 if self.replication_factor else self.replication_factor)
         else:
             # fallback
@@ -93,37 +105,42 @@ class ChordNode:
 
         if pred_id is not None and (pred_id != self.node_id):
             logging.info(f"[Node {self.node_id}] Notifying predecessor {pred_id} to link successor {succ_id}")
-            self._send(pred_host, pred_port, {
+            update_succ_msg = {
                 "cmd": "UPDATE_SUCCESSOR",
                 "new_succ_id": succ_id,
                 "new_succ_host": succ_host,
                 "new_succ_port": succ_port
-            })
+            }
+            if self.replication_consistency == "e":
+                self._send_async(pred_host, pred_port, update_succ_msg)
+            else:
+                self._send(pred_host, pred_port, update_succ_msg)
+
 
         if succ_id != self.node_id:
             logging.info(f"[Node {self.node_id}] Notifying successor {succ_id} to link predecessor {pred_id}")
-            self._send(succ_host, succ_port, {
+            update_pred_msg = {
                 "cmd": "UPDATE_PREDECESSOR",
                 "new_pred_id": pred_id,
                 "new_pred_host": pred_host,
                 "new_pred_port": pred_port
-            })
-        # Transfer data to successor
-        # if self.replication_factor is None or self.replication_factor == 1:
-        #     for key_id, value in self.data_store.items():
-        #         for key, itm_value in value.items():
-        #             ret = self._send(succ_host, succ_port, {
-        #                 "cmd": "PUT",
-        #                 "key": key,
-        #                 "value": list(itm_value)
-        #             })
-        # else:
-        resp = self._send(succ_host, succ_port, {
+            }
+            if self.replication_consistency == "e":
+                self._send_async(succ_host, succ_port, update_pred_msg)
+            else:
+                self._send(succ_host, succ_port, update_pred_msg)       
+        
+        move_all_keys = {
             "cmd": "MOVE_ALL_KEYS",
             "ttl": self.replication_factor if self.replication_factor else 1,
             "data_store": _serialize_for_json(self.data_store)
-        })
-        logging.info(f"RESPONSE from MOVE_ALL_KEYS: {resp}")
+        }
+        if self.replication_consistency == "e":
+            self._send_async(succ_host, succ_port, move_all_keys)
+        else:
+            resp = self._send(succ_host, succ_port, move_all_keys)
+            logging.info(f"RESPONSE from MOVE_ALL_KEYS: {resp}")
+        
         self.data_store.clear()
 
 
@@ -194,12 +211,16 @@ class ChordNode:
             return
             
         logging.info(f"[Node {self.node_id}] Forward PUT {key} -> {value} to {node_id} = {ttl}, {self.replication_factor}")
-        self._send(node_host, node_port, {
+        msg = {
             "cmd": "PUT",
             "key": key,
             "value": value,
             "start_node_id": start_node_id
-        })
+        }
+        if self.replication_consistency == "e":
+            self._send_async(node_host, node_port, msg)
+        else:
+            self._send(node_host, node_port, msg)
 
     def chord_get(self, key: str, start_node_id: int, ttl):
         key_id = chord_hash(key)
@@ -250,12 +271,19 @@ class ChordNode:
             self._chain_replicate_without_ttl(self.node_id, key, value, "DELETE")
             return "OK"
         
-        resp = self._send(node_host, node_port, {
+        msg = {
             "cmd": "DELETE",
             "key": key,
-            "value": value
-        })
-        return resp.get("status", "ERROR")
+            "value": value,
+            "start_node_id": start_node_id
+        }
+        if self.replication_consistency == "e":
+            self._send_async(node_host, node_port, msg)
+            return "OK"  # We don't wait for the real outcome
+        else:
+            resp = self._send(node_host, node_port, msg)
+            return resp.get("status", "ERROR")
+
 
     def chord_overlay(self, start_node_id):
         """
@@ -310,18 +338,31 @@ class ChordNode:
         # Step 1: Get data from predecessor
         if ttl > 1:
             succ_id, succ_host, succ_port = self.successor
-            resp = self._send(succ_host, succ_port, {
+            move_all_keys = {
                 "cmd": "MOVE_ALL_KEYS",
                 "ttl": ttl - 1,
                 "data_store": _serialize_for_json(self.data_store)
-            })
-            print(f"RESPONSE from MOVE_ALL_KEYS: {resp}")
+            }
+            if self.replication_consistency == "e":
+                self._send_async(succ_host, succ_port, move_all_keys)
+            else:
+                resp = self._send(succ_host, succ_port, move_all_keys)
+                logging.info(f"RESPONSE from MOVE_ALL_KEYS: {resp}")
             
         # We merge our data_store based on the data_store variable
         for k_int, kv_dict in data_store.items():
             for k, v in kv_dict.items():
                 self._store_new_value(int(k_int), k, v)
     
+    def _send_async(self, host, port, message_dict):
+        """
+        Fire-and-forget sending in a background thread (non-blocking).
+        """
+        def _bg_send():
+            self._send(host, port, message_dict)
+        t = threading.Thread(target=_bg_send, daemon=True)
+        t.start()
+        
     def _send(self, host, port, message_dict):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
