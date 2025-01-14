@@ -71,6 +71,12 @@ class ChordNode:
                 # asynchronous updates
                 self._send_async(self.predecessor[1], self.predecessor[2], update_succ_msg)
                 self._send_async(self.successor[1], self.successor[2], update_pred_msg)
+            
+                threading.Thread(
+                    target=self._acquire_keys,
+                    args=(self.node_id, self.node_id, self.replication_factor+1 if self.replication_factor else self.replication_factor),
+                    daemon=True
+                ).start()
             else:
                 print(f"[Node {self.node_id}] Notifying predecessor {self.predecessor}")
                 # linearizable => synchronous
@@ -78,8 +84,7 @@ class ChordNode:
                 logging.info(f"[Node {self.node_id}] Notified predecessor {self.predecessor} => {status}")
                 status = self._send(self.successor[1], self.successor[2], update_pred_msg)
                 logging.info(f"[Node {self.node_id}] Notified successor {self.successor} => {status}")
-
-            self._acquire_keys(self.node_id, self.node_id, self.replication_factor+1 if self.replication_factor else self.replication_factor)
+                self._acquire_keys(self.node_id, self.node_id, self.replication_factor+1 if self.replication_factor else self.replication_factor)
         else:
             # fallback
             self.successor = (self.node_id, self.host, self.port)
@@ -196,7 +201,7 @@ class ChordNode:
         if ttl == 0: return
         
         key_id = chord_hash(key)
-        
+
         if self._chain_replicate_with_ttl(start_node_id, key_id, key, value, "PUT", ttl): return
         
         (node_id, node_host, node_port), _ = self.find_successor(key_id)
@@ -204,10 +209,17 @@ class ChordNode:
             self.uploaded_songs.append(key)
 
         if node_id == self.node_id:
-            # We reached the primary node for the key_id
             self._store_new_value(key_id, key, value)
-            self._chain_replicate_without_ttl(self.node_id, key, value, "PUT")
-            logging.info(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
+            if self.replication_consistency == "e":
+                threading.Thread(
+                    target=self._chain_replicate_without_ttl, 
+                    args=(self.node_id, key, value, "PUT"), 
+                    daemon=True
+                ).start()
+            else:
+                # We reached the primary node for the key_id
+                self._chain_replicate_without_ttl(self.node_id, key, value, "PUT")
+                logging.info(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
             return
             
         logging.info(f"[Node {self.node_id}] Forward PUT {key} -> {value} to {node_id} = {ttl}, {self.replication_factor}")
@@ -268,7 +280,16 @@ class ChordNode:
         (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if node_id == self.node_id:
             self._delete_value(key_id, key, value)
-            self._chain_replicate_without_ttl(self.node_id, key, value, "DELETE")
+            if self.replication_consistency == "e":
+                threading.Thread(
+                    target=self._chain_replicate_without_ttl, 
+                    args=(self.node_id, key, value, "DELETE"), 
+                    daemon=True
+                ).start()
+            else:
+                # We reached the primary node for the key_id
+                self._chain_replicate_without_ttl(self.node_id, key, value, "DELETE")
+                logging.info(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
             return "OK"
         
         msg = {
