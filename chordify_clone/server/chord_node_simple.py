@@ -237,6 +237,11 @@ class ChordNode:
     def chord_get(self, key: str, start_node_id: int, ttl):
         key_id = chord_hash(key)
         
+        if self.replication_consistency == "e":
+            local_value, local_id = self._read_value(key_id, key)
+            if local_value:
+                return local_value, local_id
+        
         ret_value = self._chain_replicate_with_ttl(start_node_id, key_id, key, None, "GET", ttl)
         if ret_value:
             return ret_value
