@@ -210,16 +210,8 @@ class ChordNode:
 
         if node_id == self.node_id:
             self._store_new_value(key_id, key, value)
-            if self.replication_consistency == "e":
-                threading.Thread(
-                    target=self._chain_replicate_without_ttl, 
-                    args=(self.node_id, key, value, "PUT"), 
-                    daemon=True
-                ).start()
-            else:
-                # We reached the primary node for the key_id
-                self._chain_replicate_without_ttl(self.node_id, key, value, "PUT")
-                logging.info(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
+            self._chain_replicate_without_ttl(self.node_id, key, value, "PUT")
+            logging.info(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
             return
             
         logging.info(f"[Node {self.node_id}] Forward PUT {key} -> {value} to {node_id} = {ttl}, {self.replication_factor}")
@@ -285,16 +277,8 @@ class ChordNode:
         (node_id, node_host, node_port), _ = self.find_successor(key_id)
         if node_id == self.node_id:
             self._delete_value(key_id, key, value)
-            if self.replication_consistency == "e":
-                threading.Thread(
-                    target=self._chain_replicate_without_ttl, 
-                    args=(self.node_id, key, value, "DELETE"), 
-                    daemon=True
-                ).start()
-            else:
-                # We reached the primary node for the key_id
-                self._chain_replicate_without_ttl(self.node_id, key, value, "DELETE")
-                logging.info(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
+            self._chain_replicate_without_ttl(self.node_id, key, value, "DELETE")
+            logging.info(f"[Node {self.node_id}] PUT {key}[{key_id}] -> {value}")
             return "OK"
         
         msg = {
@@ -364,10 +348,11 @@ class ChordNode:
         # Step 1: Get data from predecessor
         if ttl > 1:
             succ_id, succ_host, succ_port = self.successor
+            keys_to_give = self._find_keys_for_successor_node(succ_id)
             move_all_keys = {
                 "cmd": "MOVE_ALL_KEYS",
                 "ttl": ttl - 1,
-                "data_store": _serialize_for_json(self.data_store)
+                "data_store": _serialize_for_json(keys_to_give)
             }
             if self.replication_consistency == "e":
                 self._send_async(succ_host, succ_port, move_all_keys)
@@ -486,6 +471,15 @@ class ChordNode:
             if in_interval(int(k_int), self.node_id, new_node_id):
                 dispatch_data[k_int] = kv_dict
         return dispatch_data
+    
+    def _find_keys_for_successor_node(self, succ_id: int) -> dict:
+        """Return a dict of all keys that belong to succ_id."""
+        dispatch_data = {}
+        for k_int, kv_dict in self.data_store.items():
+            # If k_int is in (self.node_id, new_node_id)
+            if not in_interval(int(k_int), self.node_id, succ_id):
+                dispatch_data[k_int] = kv_dict
+        return dispatch_data
 
     def _store_new_value(self, key_id, key, value):
         if key_id not in self.data_store:
@@ -557,7 +551,7 @@ class ChordNode:
             "start_node_id": start_node_id,
             "ttl": ttl - 1
         }
-        if self.replication_consistency == "e":
+        if self.replication_consistency == "e" and cmd != "GET":
             self._send_async(succ_host, succ_port, chain_data)
             return True
         else:
@@ -576,14 +570,18 @@ class ChordNode:
         succ_id, succ_host, succ_port = self.successor
 
         logging.info(f"[Node {self.node_id}] REPLICATE {cmd} {key} -> {value} to {succ_id} without TTL, {start_node_id}")
-        ret = self._send(succ_host, succ_port, {
+        data = {
             "cmd": cmd,
             "key": key,
             "value": value,
             "start_node_id": start_node_id,
             "ttl": self.replication_factor - 1
-        })
-        if "value" in ret and "id" in ret: return ret["value"], ret["id"] # GET SPECIFIC
+        }
+        if self.replication_consistency == "e" and cmd != "GET":
+            self._send_async(succ_host, succ_port, data)
+            return
+        ret = self._send(succ_host, succ_port, data)
+        if "value" in ret and "id" in ret: return ret["value"], ret["id"]
         return ret
     
     def _chain_replicate_acquire_keys(self, new_node_id, next_node_id, ttl):

@@ -20,8 +20,6 @@ def configure_logging(port):
     Configure logging to write only to a file and suppress console output.
     """
     logger = logging.getLogger()
-    while logger.handlers:
-        logger.handlers.pop()
     # Setup file logging
     file_handler = logging.FileHandler(f"logs/{port}.log")
     file_handler.setLevel(logging.INFO)
@@ -42,6 +40,7 @@ def run_node(host, port, bootstrap_host=None, bootstrap_port=None, replication_f
         logging.info("[Main] Caught CTRL+C. Shutting down node...")
         node.depart()
         sys.exit(0)
+        return
 
     signal.signal(signal.SIGINT, signal_handler)
 

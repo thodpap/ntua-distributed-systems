@@ -55,7 +55,7 @@ def main():
     parser.add_argument("value", type=str, nargs="?", help="Value (for insert)")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Node host")
     parser.add_argument("--port", type=int, default=5000, help="Node port")
-    parser.add_argument("--remove-output", dest="remove_output", type=bool, default=True, help="Remove output (for speadup)")
+    parser.add_argument("--show-output", dest="show_output", action="store_false", help="Remove output (for speadup)")
 
     args = parser.parse_args()
     
@@ -73,7 +73,7 @@ def main():
             "value": args.value
         }
         response = send_request(args.host, args.port, request)
-        if not args.remove_output:
+        if not args.show_output:
             pprint(f"PUT response:")
             pprint(response)
 
@@ -86,7 +86,7 @@ def main():
             "key": args.key_or_value
         }
         response = send_request(args.host, args.port, request)
-        if not args.remove_output:
+        if not args.show_output:
             print(f"GET response:")
             pprint(response)
     elif cmd == "INFO":
@@ -95,7 +95,7 @@ def main():
             "cmd": "GET_NODE_INFO"
         }
         response = send_request(args.host, args.port, request)
-        if not args.remove_output:
+        if not args.show_output:
             pprint(f"INFO response:")
             pprint(response)
     elif cmd == "DELETE":
@@ -108,7 +108,7 @@ def main():
             "value": args.value
         }
         response = send_request(args.host, args.port, request)
-        if not args.remove_output:
+        if not args.show_output:
             pprint(f"DELETE response:")
             pprint(response)
     elif cmd == "OVERLAY":
@@ -116,7 +116,7 @@ def main():
             "cmd": "GET_OVERLAY"
         }
         response = send_request(args.host, args.port, request)
-        if not args.remove_output:
+        if not args.show_output:
             pprint(f"OVERLAY response:")
             pprint(response)
     elif cmd == "DEPART":
@@ -124,12 +124,12 @@ def main():
             "cmd": "DEPART"
         }
         response = send_request(args.host, args.port, request)
-        if not args.remove_output:
+        if not args.show_output:
             pprint(f"DEPART response:")
             pprint(response)
     elif cmd == "HELP":
         pprint("Commands:")
-        pprint("  insert <key> <value> [--host <host>] [--port <port>]")
+        pprint("  insert <key> <value> [--host <host>] [--port <port>] where value by default is <host>:<port>")
         pprint("  query <key> [--host <host>] [--port <port>]")
         pprint("  delete <key> [--host <host>] [--port <port>]")
         pprint("  overlay [--host <host>] [--port <port>]")
