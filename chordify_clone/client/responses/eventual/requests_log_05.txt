@@ -1,0 +1,681 @@
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': -1, 'value': []}
+Executing QUERY:  Like a Rolling Stone
+Query for ' Like a Rolling Stone' returned: GET response:
+{'id': 6, 'value': [' 583']}
+Executing QUERY:  What's Going On
+Query for ' What's Going On' returned: GET response:
+{'id': 6, 'value': [' 510']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6, 'value': [' 524']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6, 'value': [' 524']}
+Executing QUERY:  Respect
+Query for ' Respect' returned: GET response:
+{'id': 6, 'value': [' 553', ' 528']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6, 'value': [' 524', ' 561', ' 542', ' 523']}
+Executing QUERY:  Like a Rolling Stone
+Query for ' Like a Rolling Stone' returned: GET response:
+{'id': 6, 'value': [' 583']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6, 'value': [' 524', ' 561', ' 539', ' 513', ' 542', ' 523']}
+Executing QUERY:  Respect
+Query for ' Respect' returned: GET response:
+{'id': 6, 'value': [' 553', ' 516', ' 528', ' 522', ' 554']}
+Executing QUERY:  What's Going On
+Query for ' What's Going On' returned: GET response:
+{'id': 6, 'value': [' 590', ' 510']}
+Executing QUERY:  Respect
+Query for ' Respect' returned: GET response:
+{'id': 6, 'value': [' 553', ' 516', ' 528', ' 522', ' 554']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 524', ' 561', ' 525', ' 539', ' 558', ' 513', ' 542', ' 523']}
+Executing QUERY:  Respect
+Query for ' Respect' returned: GET response:
+{'id': 6, 'value': [' 553', ' 516', ' 528', ' 522', ' 554']}
+Executing INSERT:  Hey Jude,  572
+'PUT response:'
+{'status': 'OK'}
+Executing QUERY:  What's Going On
+Query for ' What's Going On' returned: GET response:
+{'id': 6, 'value': [' 590', ' 521', ' 510', ' 531']}
+Executing QUERY:  What's Going On
+Query for ' What's Going On' returned: GET response:
+{'id': 6, 'value': [' 590', ' 521', ' 510', ' 531']}
+Executing INSERT:  Respect,  589
+'PUT response:'
+{'status': 'OK'}
+Executing QUERY:  Respect
+Query for ' Respect' returned: GET response:
+{'id': 6,
+ 'value': [' 584',
+           ' 512',
+           ' 553',
+           ' 516',
+           ' 528',
+           ' 522',
+           ' 503',
+           ' 550',
+           ' 554',
+           ' 589']}
+Executing QUERY:  Like a Rolling Stone
+Query for ' Like a Rolling Stone' returned: GET response:
+{'id': 6, 'value': [' 585', ' 583', ' 536', ' 582', ' 575', ' 520', ' 504']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 511',
+           ' 524',
+           ' 561',
+           ' 525',
+           ' 570',
+           ' 539',
+           ' 505',
+           ' 558',
+           ' 513',
+           ' 526',
+           ' 542',
+           ' 572',
+           ' 523']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 511',
+           ' 524',
+           ' 561',
+           ' 525',
+           ' 570',
+           ' 539',
+           ' 505',
+           ' 558',
+           ' 513',
+           ' 526',
+           ' 542',
+           ' 572',
+           ' 523']}
+Executing INSERT:  Respect,  587
+'PUT response:'
+{'status': 'OK'}
+Executing QUERY:  Like a Rolling Stone
+Query for ' Like a Rolling Stone' returned: GET response:
+{'id': 6,
+ 'value': [' 585',
+           ' 551',
+           ' 583',
+           ' 599',
+           ' 536',
+           ' 582',
+           ' 575',
+           ' 520',
+           ' 514',
+           ' 504']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 524',
+           ' 557',
+           ' 525',
+           ' 505',
+           ' 579',
+           ' 513',
+           ' 542',
+           ' 558',
+           ' 526',
+           ' 580',
+           ' 597',
+           ' 511',
+           ' 561',
+           ' 570',
+           ' 596',
+           ' 572',
+           ' 523',
+           ' 539',
+           ' 588',
+           ' 540']}
+Executing INSERT:  Hey Jude,  568
+'PUT response:'
+{'status': 'OK'}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 524',
+           ' 557',
+           ' 525',
+           ' 505',
+           ' 579',
+           ' 513',
+           ' 568',
+           ' 542',
+           ' 555',
+           ' 558',
+           ' 526',
+           ' 580',
+           ' 597',
+           ' 511',
+           ' 501',
+           ' 561',
+           ' 518',
+           ' 570',
+           ' 596',
+           ' 572',
+           ' 523',
+           ' 539',
+           ' 576',
+           ' 588',
+           ' 540']}
+Executing INSERT:  What's Going On,  533
+'PUT response:'
+{'status': 'OK'}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 524',
+           ' 557',
+           ' 556',
+           ' 525',
+           ' 505',
+           ' 579',
+           ' 513',
+           ' 568',
+           ' 542',
+           ' 534',
+           ' 555',
+           ' 558',
+           ' 586',
+           ' 526',
+           ' 580',
+           ' 597',
+           ' 511',
+           ' 501',
+           ' 561',
+           ' 518',
+           ' 570',
+           ' 596',
+           ' 572',
+           ' 523',
+           ' 539',
+           ' 576',
+           ' 588',
+           ' 540']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 524',
+           ' 557',
+           ' 556',
+           ' 525',
+           ' 505',
+           ' 579',
+           ' 513',
+           ' 568',
+           ' 542',
+           ' 534',
+           ' 555',
+           ' 558',
+           ' 586',
+           ' 526',
+           ' 580',
+           ' 597',
+           ' 511',
+           ' 501',
+           ' 561',
+           ' 518',
+           ' 570',
+           ' 596',
+           ' 572',
+           ' 523',
+           ' 539',
+           ' 576',
+           ' 530',
+           ' 588',
+           ' 540']}
+Executing INSERT:  Hey Jude,  594
+'PUT response:'
+{'status': 'OK'}
+Executing QUERY:  What's Going On
+Query for ' What's Going On' returned: GET response:
+{'id': 6,
+ 'value': [' 510',
+           ' 521',
+           ' 515',
+           ' 569',
+           ' 517',
+           ' 562',
+           ' 537',
+           ' 533',
+           ' 531',
+           ' 590']}
+Executing INSERT:  Hey Jude,  565
+'PUT response:'
+{'status': 'OK'}
+Executing QUERY:  Respect
+Query for ' Respect' returned: GET response:
+{'id': 6,
+ 'value': [' 541',
+           ' 584',
+           ' 548',
+           ' 587',
+           ' 512',
+           ' 560',
+           ' 559',
+           ' 553',
+           ' 516',
+           ' 528',
+           ' 522',
+           ' 503',
+           ' 550',
+           ' 554',
+           ' 589']}
+Executing INSERT:  Hey Jude,  573
+'PUT response:'
+{'status': 'OK'}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 524',
+           ' 557',
+           ' 556',
+           ' 525',
+           ' 549',
+           ' 505',
+           ' 579',
+           ' 513',
+           ' 568',
+           ' 542',
+           ' 534',
+           ' 555',
+           ' 558',
+           ' 586',
+           ' 526',
+           ' 580',
+           ' 597',
+           ' 511',
+           ' 501',
+           ' 552',
+           ' 561',
+           ' 518',
+           ' 570',
+           ' 507',
+           ' 565',
+           ' 596',
+           ' 572',
+           ' 594',
+           ' 523',
+           ' 539',
+           ' 576',
+           ' 573',
+           ' 530',
+           ' 588',
+           ' 540']}
+Executing INSERT:  Hey Jude,  519
+'PUT response:'
+{'status': 'OK'}
+Executing INSERT:  Hey Jude,  543
+'PUT response:'
+{'status': 'OK'}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 524',
+           ' 557',
+           ' 556',
+           ' 525',
+           ' 549',
+           ' 505',
+           ' 579',
+           ' 513',
+           ' 568',
+           ' 542',
+           ' 534',
+           ' 555',
+           ' 519',
+           ' 543',
+           ' 558',
+           ' 586',
+           ' 526',
+           ' 580',
+           ' 597',
+           ' 511',
+           ' 501',
+           ' 552',
+           ' 561',
+           ' 518',
+           ' 570',
+           ' 507',
+           ' 565',
+           ' 596',
+           ' 572',
+           ' 594',
+           ' 523',
+           ' 539',
+           ' 576',
+           ' 573',
+           ' 530',
+           ' 588',
+           ' 540']}
+Executing QUERY:  Like a Rolling Stone
+Query for ' Like a Rolling Stone' returned: GET response:
+{'id': 6,
+ 'value': [' 585',
+           ' 551',
+           ' 583',
+           ' 599',
+           ' 527',
+           ' 593',
+           ' 571',
+           ' 509',
+           ' 536',
+           ' 582',
+           ' 575',
+           ' 578',
+           ' 520',
+           ' 600',
+           ' 514',
+           ' 504']}
+Executing QUERY:  Like a Rolling Stone
+Query for ' Like a Rolling Stone' returned: GET response:
+{'id': 6,
+ 'value': [' 585',
+           ' 551',
+           ' 583',
+           ' 599',
+           ' 527',
+           ' 593',
+           ' 571',
+           ' 509',
+           ' 536',
+           ' 582',
+           ' 575',
+           ' 578',
+           ' 520',
+           ' 600',
+           ' 514',
+           ' 504']}
+Executing QUERY:  Respect
+Query for ' Respect' returned: GET response:
+{'id': 6,
+ 'value': [' 541',
+           ' 584',
+           ' 548',
+           ' 587',
+           ' 512',
+           ' 560',
+           ' 559',
+           ' 553',
+           ' 516',
+           ' 528',
+           ' 522',
+           ' 566',
+           ' 503',
+           ' 550',
+           ' 554',
+           ' 589']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 524',
+           ' 557',
+           ' 556',
+           ' 525',
+           ' 549',
+           ' 505',
+           ' 579',
+           ' 513',
+           ' 568',
+           ' 506',
+           ' 542',
+           ' 534',
+           ' 555',
+           ' 519',
+           ' 543',
+           ' 558',
+           ' 586',
+           ' 526',
+           ' 580',
+           ' 597',
+           ' 511',
+           ' 501',
+           ' 552',
+           ' 561',
+           ' 518',
+           ' 570',
+           ' 507',
+           ' 565',
+           ' 596',
+           ' 572',
+           ' 594',
+           ' 523',
+           ' 539',
+           ' 576',
+           ' 573',
+           ' 530',
+           ' 588',
+           ' 540']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 524',
+           ' 557',
+           ' 556',
+           ' 525',
+           ' 549',
+           ' 505',
+           ' 579',
+           ' 513',
+           ' 568',
+           ' 506',
+           ' 542',
+           ' 544',
+           ' 534',
+           ' 555',
+           ' 519',
+           ' 543',
+           ' 558',
+           ' 586',
+           ' 526',
+           ' 580',
+           ' 597',
+           ' 511',
+           ' 501',
+           ' 552',
+           ' 561',
+           ' 518',
+           ' 570',
+           ' 507',
+           ' 565',
+           ' 596',
+           ' 572',
+           ' 594',
+           ' 523',
+           ' 539',
+           ' 576',
+           ' 573',
+           ' 530',
+           ' 588',
+           ' 540']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 524',
+           ' 557',
+           ' 556',
+           ' 525',
+           ' 549',
+           ' 505',
+           ' 579',
+           ' 513',
+           ' 568',
+           ' 506',
+           ' 542',
+           ' 544',
+           ' 595',
+           ' 534',
+           ' 555',
+           ' 519',
+           ' 543',
+           ' 558',
+           ' 586',
+           ' 526',
+           ' 580',
+           ' 597',
+           ' 511',
+           ' 501',
+           ' 552',
+           ' 561',
+           ' 518',
+           ' 570',
+           ' 507',
+           ' 565',
+           ' 596',
+           ' 572',
+           ' 594',
+           ' 523',
+           ' 539',
+           ' 576',
+           ' 573',
+           ' 530',
+           ' 588',
+           ' 540']}
+Executing INSERT:  What's Going On,  508
+'PUT response:'
+{'status': 'OK'}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 524',
+           ' 557',
+           ' 556',
+           ' 525',
+           ' 549',
+           ' 505',
+           ' 579',
+           ' 513',
+           ' 568',
+           ' 506',
+           ' 542',
+           ' 544',
+           ' 595',
+           ' 534',
+           ' 555',
+           ' 519',
+           ' 543',
+           ' 558',
+           ' 586',
+           ' 526',
+           ' 580',
+           ' 597',
+           ' 511',
+           ' 501',
+           ' 552',
+           ' 561',
+           ' 518',
+           ' 570',
+           ' 507',
+           ' 598',
+           ' 565',
+           ' 596',
+           ' 572',
+           ' 594',
+           ' 523',
+           ' 539',
+           ' 576',
+           ' 573',
+           ' 530',
+           ' 588',
+           ' 540']}
+Executing QUERY:  Like a Rolling Stone
+Query for ' Like a Rolling Stone' returned: GET response:
+{'id': 6,
+ 'value': [' 545',
+           ' 593',
+           ' 577',
+           ' 571',
+           ' 582',
+           ' 578',
+           ' 520',
+           ' 585',
+           ' 583',
+           ' 527',
+           ' 575',
+           ' 547',
+           ' 514',
+           ' 504',
+           ' 551',
+           ' 509',
+           ' 536',
+           ' 599',
+           ' 600']}
+Executing QUERY:  What's Going On
+Query for ' What's Going On' returned: GET response:
+{'id': 6,
+ 'value': [' 546',
+           ' 510',
+           ' 521',
+           ' 563',
+           ' 564',
+           ' 508',
+           ' 529',
+           ' 515',
+           ' 569',
+           ' 517',
+           ' 562',
+           ' 537',
+           ' 592',
+           ' 533',
+           ' 531',
+           ' 590']}
+Executing QUERY:  Hey Jude
+Query for ' Hey Jude' returned: GET response:
+{'id': 6,
+ 'value': [' 524',
+           ' 557',
+           ' 556',
+           ' 525',
+           ' 549',
+           ' 505',
+           ' 579',
+           ' 513',
+           ' 568',
+           ' 506',
+           ' 542',
+           ' 544',
+           ' 595',
+           ' 534',
+           ' 591',
+           ' 555',
+           ' 519',
+           ' 543',
+           ' 558',
+           ' 586',
+           ' 526',
+           ' 580',
+           ' 597',
+           ' 511',
+           ' 581',
+           ' 501',
+           ' 552',
+           ' 561',
+           ' 518',
+           ' 570',
+           ' 507',
+           ' 598',
+           ' 565',
+           ' 596',
+           ' 572',
+           ' 594',
+           ' 523',
+           ' 535',
+           ' 539',
+           ' 576',
+           ' 573',
+           ' 530',
+           ' 588',
+           ' 540']}

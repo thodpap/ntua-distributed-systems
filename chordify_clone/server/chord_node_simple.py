@@ -231,7 +231,7 @@ class ChordNode:
         
         if self.replication_consistency == "e":
             local_value, local_id = self._read_value(key_id, key)
-            if local_value:
+            if local_id >= 0:
                 return local_value, local_id
         
         ret_value = self._chain_replicate_with_ttl(start_node_id, key_id, key, None, "GET", ttl)
